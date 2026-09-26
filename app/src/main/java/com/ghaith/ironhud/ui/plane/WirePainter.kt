@@ -37,8 +37,8 @@ class WirePainter {
         p.project(mesh, basis, fView, cx, cy, timeS)
         val canvas = scope.drawContext.canvas.nativeCanvas
         if (glowPx > 0f) {
-            lines(canvas, p.near, Hud.blue(0.22f * alpha).toArgb(), glowPx)
-            lines(canvas, p.far, Hud.blue(0.12f * alpha).toArgb(), glowPx)
+            lines(canvas, p.near, Hud.blue(0.14f * alpha).toArgb(), glowPx)
+            lines(canvas, p.far, Hud.blue(0.06f * alpha).toArgb(), glowPx)
         }
         lines(canvas, p.faint, Hud.blue(0.38f * alpha).toArgb(), strokePx * 0.8f)
         lines(canvas, p.far, Hud.blue(0.45f * alpha).toArgb(), strokePx)

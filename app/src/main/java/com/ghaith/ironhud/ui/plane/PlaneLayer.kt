@@ -95,7 +95,7 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
             painter.draw(
                 this, mesh, basis, fView, cx, cy, now / 1000.0, alpha,
                 strokePx = (if (selected) 1.6 else 1.1).dp.toPx(),
-                glowPx = if (selected) 5.dp.toPx() else 0f,
+                glowPx = if (selected) 3.5.dp.toPx() else 0f,
             )
 
             // Data tag with a leader line (flipped to the left near the right edge).

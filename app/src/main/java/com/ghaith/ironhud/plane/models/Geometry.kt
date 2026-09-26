@@ -241,7 +241,8 @@ internal class Mesher(private val lod: Lod) {
                 else List(n) { i -> v(b.point(sec, 2 * PI * i / n).side(k)) }
             }
             val last = rings.lastIndex
-            loft(rings, n, 1) { i -> !lite || i == last || i % 2 == 0 }
+            // Every station is a ring up close; further out every other one keeps the shape without clutter.
+            loft(rings, n, 1) { i -> detail || i == last || i % 2 == 0 }
             if (detail && k > 0) {
                 windows(b)
                 cockpit(b)

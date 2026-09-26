@@ -167,7 +167,7 @@ private fun ModelView(
         ) {
             val mesh = AircraftModels.mesh(airframe, Lod.DETAIL)
             val d = 3.2
-            val px = min(size.width, size.height) * 0.82f * zoom
+            val px = min(size.width, size.height) * 0.95f * zoom
             val cx = size.width / 2
             val cy = size.height * 0.5f
             val basis = AircraftModels.viewBasis(yaw.toDouble(), pitch.toDouble(), d)
@@ -198,7 +198,7 @@ private fun DrawScope.pedestal(m: DoubleArray, fView: Double, cx: Float, cy: Flo
         if (f <= 0.05) return null
         return Offset((cx + fView * r / f).toFloat(), (cy - fView * u / f).toFloat())
     }
-    for ((radius, alpha) in listOf(0.3 to 0.18f, 0.5 to 0.28f, 0.7 to 0.14f)) {
+    for ((radius, alpha) in listOf(0.26 to 0.18f, 0.42 to 0.28f, 0.58 to 0.14f)) {
         var prev: Offset? = null
         for (i in 0..72) {
             val a = 2 * PI * i / 72
@@ -209,8 +209,8 @@ private fun DrawScope.pedestal(m: DoubleArray, fView: Double, cx: Float, cy: Flo
     }
     for (i in 0 until 12) {
         val a = 2 * PI * i / 12
-        val a0 = p(0.3 * cos(a), 0.3 * sin(a))
-        val a1 = p(0.7 * cos(a), 0.7 * sin(a))
+        val a0 = p(0.26 * cos(a), 0.26 * sin(a))
+        val a1 = p(0.58 * cos(a), 0.58 * sin(a))
         if (a0 != null && a1 != null) drawLine(Hud.blue(0.12f), a0, a1, 1.dp.toPx())
     }
 }
