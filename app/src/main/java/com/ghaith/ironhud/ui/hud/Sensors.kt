@@ -73,7 +73,7 @@ private const val SMOOTH = 0.15f
 @Suppress("DEPRECATION")
 private fun displayRotation(context: Context): Int =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        context.display?.rotation ?: Surface.ROTATION_0
+        context.display.rotation
     } else {
         (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation
     }

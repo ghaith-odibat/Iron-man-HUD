@@ -49,7 +49,7 @@ object BriefParser {
                 else -> if (firstLoose == null) firstLoose = line
             }
         }
-        if (name.isBlank() && firstLoose != null) name = firstLoose!!.take(40)
+        if (name.isBlank() && firstLoose != null) name = firstLoose.take(40)
         return Brief(
             name = name.trim().trimEnd('.'),
             type = type.trim(),

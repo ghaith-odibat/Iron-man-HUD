@@ -58,11 +58,13 @@ jobs:
           name: Iron HUD v0.1.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          files: out/IronHUD.apk
+          files: |
+            out/IronHUD.apk
+            app/build/hud-screenshots/*.png
           body: |
             Built from `${{ github.ref_name }}` @ ${{ github.sha }}.
 
             **Install on your tablet:** download `IronHUD.apk` below, open it, and allow
             "Install unknown apps" for your browser/Files app when asked.
-            Then open the Vault (key icon) and paste your free API keys — see
+            Then tap VAULT and paste your free API keys — see
             [docs/GET_FREE_KEYS.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/GET_FREE_KEYS.md).
