@@ -123,15 +123,17 @@ fun HudContent(
     }
 }
 
-/** Right-edge button column: SCAN / VOICE / TINT / AUTO / SNAP / VAULT. */
+/** Right-edge button column: SCAN / VOICE / TINT / AUTO / LIGHT / SNAP / VAULT. */
 @Composable
 fun ControlRail(
     settings: HudSettings,
+    torch: Boolean,
     onScan: () -> Unit,
     onVoice: () -> Unit,
     onTint: () -> Unit,
     onAuto: () -> Unit,
     onSnap: () -> Unit,
+    onLight: () -> Unit,
     onVault: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -144,6 +146,7 @@ fun ControlRail(
         HudButton("VOICE", active = settings.voice, onClick = onVoice)
         HudButton("TINT", active = settings.tint, onClick = onTint)
         HudButton("AUTO", active = settings.autoLock, onClick = onAuto)
+        HudButton("LIGHT", active = torch, onClick = onLight)
         HudButton("SNAP", active = false, onClick = onSnap)
         HudButton("VAULT", active = false, onClick = onVault)
     }

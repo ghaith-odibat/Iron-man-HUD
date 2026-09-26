@@ -5,23 +5,27 @@ import android.graphics.Paint
 import android.view.View
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.TorchState
 import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ghaith.ironhud.ui.theme.Hud
 import com.ghaith.ironhud.vision.TrackedObject
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import kotlinx.coroutines.delay
 
 /**
  * Back-camera preview with ML Kit object tracking running on every analysis frame.
@@ -31,6 +35,9 @@ import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 @Composable
 fun CameraLayer(
     tint: Boolean,
+    torch: Boolean,
+    onTorchState: (Boolean) -> Unit,
+    onTorchUnavailable: () -> Unit,
     onPreviewView: (PreviewView?) -> Unit,
     onObjects: (List<TrackedObject>) -> Unit,
     modifier: Modifier = Modifier,
@@ -66,8 +73,27 @@ fun CameraLayer(
 
     DisposableEffect(lifecycleOwner) {
         cameraController.bindToLifecycle(lifecycleOwner)
+        val torchObserver = Observer<Int> { onTorchState(it == TorchState.ON) }
+        cameraController.torchState.observe(lifecycleOwner, torchObserver)
         onDispose {
+            cameraController.torchState.removeObserver(torchObserver)
             cameraController.unbind()
+        }
+    }
+
+    // Flashlight: wait for the camera to be bound, then check it actually has a flash unit.
+    LaunchedEffect(torch) {
+        var info = cameraController.cameraInfo
+        var waited = 0
+        while (info == null && waited < 3_000) {
+            delay(100)
+            waited += 100
+            info = cameraController.cameraInfo
+        }
+        when {
+            info == null -> if (torch) onTorchUnavailable()
+            !info.hasFlashUnit() -> if (torch) onTorchUnavailable()
+            else -> cameraController.enableTorch(torch)
         }
     }
     DisposableEffect(Unit) {

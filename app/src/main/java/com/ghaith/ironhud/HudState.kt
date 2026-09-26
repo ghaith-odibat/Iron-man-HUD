@@ -47,5 +47,7 @@ data class HudState(
     val lock: LockUi? = null,
     val panel: PanelUi? = null,
     val uplink: Uplink = Uplink(),
+    /** Flashlight (camera torch) on. Mirrors the camera's real torch state. */
+    val torch: Boolean = false,
     val toast: String? = null,
 )

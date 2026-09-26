@@ -178,6 +178,18 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         if (hit != null) lockOn(hit.id, hit.box, hit.category) else lockOn(null, squareAround(center, SCAN_REGION), null)
     }
 
+    // ---- flashlight -------------------------------------------------------------------------------
+
+    fun toggleTorch() = _state.update { it.copy(torch = !it.torch) }
+
+    /** The camera reports what the torch is really doing (it switches off when the app is backgrounded). */
+    fun onTorchState(on: Boolean) = _state.update { if (it.torch == on) it else it.copy(torch = on) }
+
+    fun onTorchUnavailable() {
+        _state.update { it.copy(torch = false) }
+        toast("NO FLASHLIGHT ON THIS CAMERA")
+    }
+
     fun dismiss() {
         suppressedId = _state.value.lock?.targetId
         dwellId = null

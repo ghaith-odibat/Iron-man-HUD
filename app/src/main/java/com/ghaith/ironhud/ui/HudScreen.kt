@@ -100,6 +100,9 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
     ) {
         CameraLayer(
             tint = settings.tint,
+            torch = state.torch,
+            onTorchState = vm::onTorchState,
+            onTorchUnavailable = vm::onTorchUnavailable,
             onPreviewView = { view ->
                 previewView.value = view
                 vm.frameSource = view?.let { v -> { v.bitmap } }
@@ -131,11 +134,13 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
 
         ControlRail(
             settings = settings,
+            torch = state.torch,
             onScan = vm::scanCenter,
             onVoice = { vm.setVoice(!settings.voice) },
             onTint = { vm.setTint(!settings.tint) },
             onAuto = { vm.setAutoLock(!settings.autoLock) },
             onSnap = snap,
+            onLight = vm::toggleTorch,
             onVault = onOpenVault,
             modifier = Modifier.align(Alignment.CenterEnd),
         )
