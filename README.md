@@ -38,10 +38,26 @@ Everything is drawn in a single colour, light tech blue (`#66D9FF`).
 
 Tap **PLANE** to see live aircraft through the camera:
 
-* **3D holograms:** every aircraft within ~50 km is drawn as a blue wireframe model. The model
-  (airliner, wide-body, four-engine, business jet, light aircraft, helicopter) is picked from its
-  type. It is rotated to the plane's real heading and climb, and seen from where you stand, so a
-  plane overhead shows its belly. Models glide smoothly between data updates.
+* **3D holograms:** every aircraft within ~50 km is drawn as a blue wireframe model of its exact
+  type and variant, from over 270 models covering nearly 300 ICAO type codes. The catalogue spans
+  airliners, regionals, turboprops, business jets, light aircraft, helicopters, military
+  transports, fast jets, gliders and balloons. Variants differ where you can see it:
+  * A320ceo fences vs neo sharklets.
+  * 737-800 blended winglets vs MAX split winglets and chevron nacelles.
+  * 747-400 winglets and upper deck vs 747-8 raked tips and longer deck.
+  * 777-300ER raked tips vs 777X folding tips.
+  * Fenestron vs tail rotor, skids vs wheels.
+  
+  Models are built from real length and span with airfoil-thick wings, nacelles with fan faces
+  and exhaust cones, windows and cockpit panes. Propellers and rotors spin. Each model is rotated
+  to the plane's real heading and climb, and seen from where you stand, so a plane overhead shows
+  its belly. Bigger aircraft look bigger, near halves are brighter than far halves, and models
+  glide smoothly between data updates. Unknown types fall back to a generic model of the right
+  class.
+* **Holo hangar:** tap the spinning model on a plane's card, or the `◈ HANGAR` chip, to see that
+  type full-screen. Drag to rotate, pinch to zoom and double-tap to reset. A spec sheet shows
+  length, span or rotor, engines and configuration. **◀ PREV / NEXT ▶** (or the code strip)
+  browses every model in the catalogue.
 * **Tags:** each plane is labelled with callsign, type, flight level or altitude, speed and
   distance. Planes outside the view get arrows on the screen edge.
 * **Radar:** a heading-up scope (bottom left) shows everything around you, with rings at
@@ -113,6 +129,11 @@ CameraX preview ──► ML Kit object tracker (on-device, every frame) ──�
                                    ▼
                   BriefParser (progressive) ──► HUD card + voice
 ```
+
+Aircraft models: `plane/models/` holds the parametric geometry (lofted fuselages, tapered wings
+with winglet/raked/fence tips, nacelles, props, rotors, gear) and `AircraftTypes`, the type
+catalogue. Meshes are built at three levels of detail and cached. `WireProjection` projects them
+into reusable line buffers, drawn in one batched call per brightness.
 
 Code map: `ai/` (providers, key rotation, streaming, parsing; plain JVM, unit-tested),
 `vision/` (crop, wireframe, labeler), `ui/` (Compose HUD), `data/` (encrypted key vault and

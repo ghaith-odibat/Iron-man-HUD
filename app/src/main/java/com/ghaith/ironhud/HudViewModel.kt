@@ -12,6 +12,7 @@ import com.ghaith.ironhud.ai.ApiKeyEntry
 import com.ghaith.ironhud.ai.Prompt
 import com.ghaith.ironhud.airspace.AirspaceState
 import com.ghaith.ironhud.airspace.AirspaceTracker
+import com.ghaith.ironhud.plane.models.AircraftTypes
 import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.plane.PlaneHitIndex
 import com.ghaith.ironhud.plane.ObserverClient
@@ -271,6 +272,15 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setSkyView(on: Boolean) = viewModelScope.launch { settingsRepo.setSkyView(on) }
+
+    // ---- holo hangar ----------------------------------------------------------------------------------
+
+    /** Opens the model viewer on [typeId] (an ICAO designator), or on the first type in the catalogue. */
+    fun openHangar(typeId: String?) = _state.update {
+        it.copy(hangar = typeId?.takeIf { id -> AircraftTypes.byCode(id) != null } ?: AircraftTypes.catalog.first().id)
+    }
+
+    fun closeHangar() = _state.update { it.copy(hangar = null) }
 
     fun deselectPlane() {
         planeBriefJob?.cancel()

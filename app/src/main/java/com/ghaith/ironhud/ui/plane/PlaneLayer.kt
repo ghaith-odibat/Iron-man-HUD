@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
@@ -24,10 +23,13 @@ import com.ghaith.ironhud.plane.AircraftModels
 import com.ghaith.ironhud.plane.CamVec
 import com.ghaith.ironhud.plane.Enu
 import com.ghaith.ironhud.plane.Geo
+import com.ghaith.ironhud.plane.Lod
 import com.ghaith.ironhud.plane.Projector
 import com.ghaith.ironhud.ui.theme.Hud
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -40,7 +42,7 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
     val tm = rememberTextMeasurer(cacheSize = 96)
     val frame by if (animate) produceState(0L) { while (true) withFrameMillis { value = it } }
     else remember { androidx.compose.runtime.mutableLongStateOf(0L) }
-    val path = remember { Path() }
+    val painter = remember { WirePainter() }
 
     Canvas(modifier) {
         if (frame < 0) return@Canvas // reading the frame clock re-draws this layer every frame
@@ -79,29 +81,22 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
             val selected = a.hex == scene.selectedHex
             val distKm = item.trueEnu.horizontal / 1000
             val near = 1.0 - (distKm / 50.0).coerceIn(0.0, 1.0)
-            val lengthPx = ((60 + 90 * near) * (if (selected) 1.35 else 1.0)).dp.toPx()
+            val airframe = AircraftModels.airframeFor(a)
+            // Holograms are enlarged to read on screen, but a jumbo still looks bigger than a Cessna.
+            val sizeCue = (max(airframe.lengthM, airframe.spanM) / 40.0).pow(0.3).coerceIn(0.7, 1.3)
+            val lengthPx = ((60 + 90 * near) * sizeCue * (if (selected) 1.35 else 1.0)).dp.toPx()
             val alpha = (0.45 + 0.55 * near).toFloat().coerceIn(0.45f, 1f)
 
-            // The model is scaled up so it reads on screen, then every vertex is projected for true perspective.
-            val mesh = AircraftModels.mesh(AircraftModels.kindFor(a))
+            // Scaled so the model spans lengthPx, then every vertex is projected for true perspective.
+            val mesh = AircraftModels.mesh(airframe, if (lengthPx >= 110.dp.toPx()) Lod.NORMAL else Lod.LITE)
             val scale = lengthPx * item.cam.forward / fView
             val trackMag = (a.trackDeg ?: Geo.bearingDeg(item.trueEnu)) - decl
-            val verts = AircraftModels.worldVertices(mesh, trackMag, a.pitchDeg, scale, Geo.toMagnetic(item.trueEnu, decl))
-            val pts = verts.map { Projector.project(it, rot, rotation, fView, cx, cy) }
-            path.reset()
-            val e = mesh.edges
-            var i = 0
-            while (i < e.size) {
-                val p1 = pts[e[i]]
-                val p2 = pts[e[i + 1]]
-                if (p1 != null && p2 != null) {
-                    path.moveTo(p1.x, p1.y)
-                    path.lineTo(p2.x, p2.y)
-                }
-                i += 2
-            }
-            if (selected) drawPath(path, Hud.blue(0.25f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round))
-            drawPath(path, Hud.blue(alpha), style = Stroke((if (selected) 1.8 else 1.3).dp.toPx(), cap = StrokeCap.Round))
+            val basis = AircraftModels.cameraBasis(trackMag, a.pitchDeg, scale, Geo.toMagnetic(item.trueEnu, decl), rot, rotation)
+            painter.draw(
+                this, mesh, basis, fView, cx, cy, now / 1000.0, alpha,
+                strokePx = (if (selected) 1.6 else 1.1).dp.toPx(),
+                glowPx = if (selected) 5.dp.toPx() else 0f,
+            )
 
             // Data tag with a leader line (flipped to the left near the right edge).
             val title = tm.measure(

@@ -82,5 +82,7 @@ data class HudState(
     /** Plane Mode observer-location map is open / resolving the picked point. */
     val locationPicker: Boolean = false,
     val pickerBusy: Boolean = false,
+    /** Holo hangar open on this aircraft type (ICAO designator), or closed when null. */
+    val hangar: String? = null,
     val toast: String? = null,
 )

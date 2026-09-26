@@ -51,6 +51,7 @@ import com.ghaith.ironhud.HudState
 import com.ghaith.ironhud.PanelUi
 import com.ghaith.ironhud.data.HudSettings
 import com.ghaith.ironhud.ui.plane.PlaneLayer
+import com.ghaith.ironhud.plane.AircraftModels
 import com.ghaith.ironhud.ui.plane.PlanePanel
 import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.plane.RadarScope
@@ -74,6 +75,8 @@ fun HudContent(
     onClosePlane: () -> Unit = {},
     onOpenLocation: () -> Unit = {},
     onToggleSky: () -> Unit = {},
+    /** Opens the holo hangar, on a type (ICAO designator) or the catalogue start. */
+    onOpenHangar: (String?) -> Unit = {},
     /** Extra height taken by control strips at the bottom (portrait cards move up by this). */
     bottomInset: Dp = 0.dp,
 ) {
@@ -122,7 +125,8 @@ fun HudContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 AirspaceStatus(plane)
-                ObserverBar(plane, onOpenLocation, onToggleSky, Modifier.padding(top = 6.dp))
+                ObserverBar(plane, onOpenLocation, onToggleSky, { onOpenHangar(plane.selected?.let { AircraftModels.airframeFor(it).id }) },
+                    Modifier.padding(top = 6.dp))
             }
             val selected = plane.selected
             AnimatedVisibility(
@@ -143,6 +147,7 @@ fun HudContent(
                         panel = plane.panel,
                         route = plane.routeOf(selected),
                         onClose = onClosePlane,
+                        onInspect = { onOpenHangar(AircraftModels.airframeFor(selected).id) },
                         modifier = Modifier
                             .width(panelWidth)
                             .heightIn(max = if (landscape) (maxHeight - 140.dp - 252.dp).coerceAtLeast(220.dp) else maxHeight * 0.5f),
@@ -383,7 +388,13 @@ fun FocusMarkerView(marker: FocusMarker, modifier: Modifier = Modifier) {
 
 /** "◎ OBSERVER: LONDON HEATHROW AIRPORT · VIRTUAL" (tap to change) plus the SKY/CAM switch. */
 @Composable
-private fun ObserverBar(plane: PlaneScene, onOpenLocation: () -> Unit, onToggleSky: () -> Unit, modifier: Modifier = Modifier) {
+private fun ObserverBar(
+    plane: PlaneScene,
+    onOpenLocation: () -> Unit,
+    onToggleSky: () -> Unit,
+    onOpenHangar: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val observer = plane.airspace.observer
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val text = if (observer == null) "◎ MY LOCATION · CHANGE"
@@ -407,5 +418,13 @@ private fun ObserverBar(plane: PlaneScene, onOpenLocation: () -> Unit, onToggleS
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }
+        BasicText(
+            "◈ HANGAR",
+            style = Hud.text(11.sp, weight = FontWeight.Bold),
+            modifier = Modifier
+                .border(1.dp, Hud.blue(0.7f))
+                .clickable(onClick = onOpenHangar)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
     }
 }

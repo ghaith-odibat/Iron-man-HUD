@@ -31,8 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -46,10 +44,11 @@ import com.ghaith.ironhud.plane.AircraftInfo
 import com.ghaith.ironhud.plane.AircraftModels
 import com.ghaith.ironhud.plane.Geo
 import com.ghaith.ironhud.plane.GeoPoint
-import com.ghaith.ironhud.plane.WireMesh
+import com.ghaith.ironhud.plane.Lod
+import com.ghaith.ironhud.plane.ModelKind
+import com.ghaith.ironhud.plane.models.Airframe
 import com.ghaith.ironhud.ui.theme.Hud
 import java.util.Locale
-import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -63,16 +62,19 @@ fun PlanePanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
+    /** Opens the full-screen hologram of this aircraft's type. */
+    onInspect: () -> Unit = {},
 ) {
     val transition = rememberInfiniteTransition(label = "plane-panel")
     val spin = if (animate) {
-        transition.animateFloat(0f, 360f, infiniteRepeatable(tween(9_000, easing = LinearEasing)), label = "spin").value
+        transition.animateFloat(0f, 360f, infiniteRepeatable(tween(10_000, easing = LinearEasing)), label = "spin").value
     } else 35f
     val blink = if (animate) {
         transition.animateFloat(0.2f, 1f, infiniteRepeatable(tween(550), RepeatMode.Reverse), label = "blink").value
     } else 1f
     val shape = CutCornerShape(topEnd = 22.dp, bottomStart = 22.dp)
-    val kind = AircraftModels.kindFor(aircraft)
+    val airframe = AircraftModels.airframeFor(aircraft)
+    val kind = airframe.kind
     val enu = viewer?.let { Geo.enu(it, GeoPoint(aircraft.lat, aircraft.lon, aircraft.altM)) }
 
     Column(
@@ -132,9 +134,19 @@ fun PlanePanel(
                     }
                 }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Turntable(AircraftModels.mesh(kind), spin, Modifier.size(128.dp).border(1.dp, Hud.blue(0.5f)).background(Hud.blue(0.05f)))
-                BasicText(kind.label, style = Hud.text(9.sp, alpha = 0.6f, spacing = 1.5.sp), modifier = Modifier.padding(top = 4.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onInspect)) {
+                Turntable(
+                    airframe, spin, Modifier.size(136.dp).border(1.dp, Hud.blue(0.5f)).background(Hud.blue(0.05f)),
+                    // 10 s per turn: every rotor speed is a whole number of turns per cycle, so no jump at the wrap.
+                    timeS = if (animate) spin / 36.0 else 0.3,
+                )
+                BasicText(
+                    if (airframe.generic) "GENERIC ${kind.label}" else ModelFormat.size(airframe),
+                    style = Hud.text(9.sp, alpha = 0.65f, spacing = 1.sp, glow = false),
+                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 1,
+                )
+                BasicText("◈ HANGAR", style = Hud.text(10.sp, weight = FontWeight.Bold, spacing = 1.5.sp), modifier = Modifier.padding(top = 2.dp))
             }
         }
 
@@ -172,37 +184,36 @@ fun PlanePanel(
 
 /** A slowly rotating hologram of the aircraft type, seen from 20° above, on a ring pedestal. */
 @Composable
-fun Turntable(mesh: WireMesh, yawDeg: Float, modifier: Modifier = Modifier) {
-    val path = remember { Path() }
+fun Turntable(airframe: Airframe, yawDeg: Float, modifier: Modifier = Modifier, timeS: Double = 0.0) {
+    val painter = remember { WirePainter() }
     Canvas(modifier) {
-        val s = size.minDimension * 0.78f
-        val c = center + Offset(0f, size.height * 0.04f)
-        val yaw = Geo.rad(yawDeg.toDouble())
-        val el = Geo.rad(20.0)
-        fun proj(x: Float, y: Float, z: Float): Offset {
-            val xr = x * cos(yaw) - y * sin(yaw)
-            val yr = x * sin(yaw) + y * cos(yaw)
-            return Offset((c.x + xr * s).toFloat(), (c.y - (z * cos(el) + yr * sin(el)) * s).toFloat())
-        }
+        val el = 20.0
+        val d = 3.2
+        val px = size.minDimension * 0.86f
+        val c = center + Offset(0f, size.height * 0.02f)
         // Pedestal ring.
-        drawOval(
-            Hud.blue(0.3f), topLeft = Offset(c.x - s * 0.45f, c.y + s * 0.2f - s * 0.45f * sin(el).toFloat()),
-            size = Size(s * 0.9f, s * 0.9f * sin(el).toFloat() * 2), style = Stroke(1.dp.toPx()),
+        val ringW = px * 0.9f
+        val ringH = ringW * sin(Geo.rad(el)).toFloat()
+        drawOval(Hud.blue(0.3f), topLeft = Offset(c.x - ringW / 2, c.y + px * 0.18f - ringH / 2), size = Size(ringW, ringH), style = Stroke(1.dp.toPx()))
+        painter.draw(
+            this, AircraftModels.mesh(airframe, Lod.DETAIL), AircraftModels.viewBasis(yawDeg.toDouble(), el, d),
+            px * d, c.x, c.y, timeS, alpha = 1f, strokePx = 0.9.dp.toPx(), glowPx = 3.dp.toPx(),
         )
-        path.reset()
-        val v = mesh.vertices
-        val e = mesh.edges
-        var i = 0
-        while (i < e.size) {
-            val a = proj(v[e[i] * 3], v[e[i] * 3 + 1], v[e[i] * 3 + 2])
-            val b = proj(v[e[i + 1] * 3], v[e[i + 1] * 3 + 1], v[e[i + 1] * 3 + 2])
-            path.moveTo(a.x, a.y)
-            path.lineTo(b.x, b.y)
-            i += 2
-        }
-        drawPath(path, Hud.blue(0.22f), style = Stroke(4.dp.toPx(), cap = StrokeCap.Round))
-        drawPath(path, Hud.Blue, style = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round))
     }
+}
+
+/** Dimension read-outs for a model. */
+object ModelFormat {
+    fun metres(m: Double) = String.format(Locale.US, "%.1f M", m)
+
+    /** "L 37.6 · SPAN 35.8 M", or the rotor / envelope for rotorcraft and balloons. */
+    fun size(a: Airframe): String = when {
+        a.rotorM != null -> "L ${fmt(a.lengthM)} · ROTOR ${fmt(a.rotorM!!)} M"
+        a.kind == ModelKind.BALLOON -> "H ${fmt(a.lengthM)} · Ø ${fmt(a.spanM)} M"
+        else -> "L ${fmt(a.lengthM)} · SPAN ${fmt(a.spanM)} M"
+    }
+
+    private fun fmt(m: Double) = String.format(Locale.US, "%.1f", m)
 }
 
 /** FROM → TO with airport names and how far along the flight is. */

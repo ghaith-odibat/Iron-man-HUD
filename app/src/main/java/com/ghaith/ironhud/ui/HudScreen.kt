@@ -48,6 +48,7 @@ import com.ghaith.ironhud.ui.hud.ZoomControl
 import com.ghaith.ironhud.ui.hud.rememberBatteryPercent
 import com.ghaith.ironhud.ui.hud.rememberClock
 import com.ghaith.ironhud.ui.hud.rememberSensorHub
+import com.ghaith.ironhud.ui.plane.HangarScreen
 import com.ghaith.ironhud.ui.plane.LocationPickerScreen
 import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.theme.Hud
@@ -126,6 +127,7 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
         else myLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
     BackHandler(enabled = state.locationPicker) { vm.closeLocationPicker() }
+    BackHandler(enabled = state.hangar != null) { vm.closeHangar() }
 
     val snap = {
         val needsPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
@@ -203,6 +205,7 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                 onClosePlane = vm::deselectPlane,
                 onOpenLocation = vm::openLocationPicker,
                 onToggleSky = { vm.setSkyView(!settings.skyView) },
+                onOpenHangar = vm::openHangar,
                 bottomInset = extraStrips,
             )
         }
@@ -271,6 +274,9 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                 onUseMyLocation = useMyLocation,
                 onClose = vm::closeLocationPicker,
             )
+        }
+        state.hangar?.let { type ->
+            HangarScreen(startId = type, onClose = vm::closeHangar)
         }
     }
 }
