@@ -108,12 +108,16 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
                 a.label + (a.typeCode?.let { "  $it" } ?: ""),
                 Hud.text(12.sp, alpha = alpha, weight = FontWeight.Bold, glow = false),
             )
+            val route = scene.routeOf(a)
+            val routeLine = route?.let {
+                tm.measure(it.short, Hud.text(11.sp, alpha = alpha * (if (it.plausible) 1f else 0.6f), weight = FontWeight.Bold, glow = false))
+            }
             val line2 = tm.measure(
                 "${PlaneFormat.altitude(a)}${PlaneFormat.trend(a)} · ${PlaneFormat.speed(a)}",
                 Hud.text(10.sp, alpha = alpha * 0.9f, glow = false),
             )
             val line3 = tm.measure(PlaneFormat.distance(distKm), Hud.text(10.sp, alpha = alpha * 0.75f, glow = false))
-            val tagW = maxOf(title.size.width, line2.size.width, line3.size.width)
+            val tagW = maxOf(title.size.width, line2.size.width, line3.size.width, routeLine?.size?.width ?: 0)
             val flip = sp.x + lengthPx * 0.55f + tagW > size.width - 12.dp.toPx()
             val tagX = if (flip) sp.x - lengthPx * 0.55f - tagW else sp.x + lengthPx * 0.55f
             val tagY = sp.y - lengthPx * 0.45f
@@ -121,8 +125,13 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
             drawLine(Hud.blue(alpha * 0.7f), Offset(sp.x + (if (flip) -1 else 1) * lengthPx * 0.2f, sp.y - lengthPx * 0.15f),
                 Offset(anchorX, tagY + 4.dp.toPx()), 1.dp.toPx())
             drawText(title, topLeft = Offset(tagX, tagY - title.size.height))
-            drawText(line2, topLeft = Offset(tagX, tagY + 2.dp.toPx()))
-            drawText(line3, topLeft = Offset(tagX, tagY + 2.dp.toPx() + line2.size.height))
+            var lineY = tagY + 2.dp.toPx()
+            routeLine?.let {
+                drawText(it, topLeft = Offset(tagX, lineY))
+                lineY += it.size.height
+            }
+            drawText(line2, topLeft = Offset(tagX, lineY))
+            drawText(line3, topLeft = Offset(tagX, lineY + line2.size.height))
 
             if (selected) lockBrackets(Offset(sp.x, sp.y), lengthPx * 0.62f)
             hits += a.hex to (sp.x to sp.y)

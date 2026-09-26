@@ -3,6 +3,7 @@ package com.ghaith.ironhud.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
@@ -47,6 +48,7 @@ import com.ghaith.ironhud.ui.hud.ZoomControl
 import com.ghaith.ironhud.ui.hud.rememberBatteryPercent
 import com.ghaith.ironhud.ui.hud.rememberClock
 import com.ghaith.ironhud.ui.hud.rememberSensorHub
+import com.ghaith.ironhud.ui.plane.LocationPickerScreen
 import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.theme.Hud
 import kotlin.math.roundToInt
@@ -107,12 +109,23 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
     val togglePlane = {
         when {
             state.planeMode -> vm.setPlaneMode(false)
-            vm.hasLocationPermission() -> vm.setPlaneMode(true)
+            // Watching a chosen place doesn't need the tablet's location.
+            vm.hasLocationPermission() || settings.planeObserver != null -> vm.setPlaneMode(true)
             else -> locationPermission.launch(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
             )
         }
     }
+
+    // "Use my current location" in the observer picker.
+    val myLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.any { it }) vm.useMyLocation() else vm.toast("LOCATION NEEDED TO USE YOUR POSITION")
+    }
+    val useMyLocation = {
+        if (vm.hasLocationPermission()) vm.useMyLocation()
+        else myLocationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+    BackHandler(enabled = state.locationPicker) { vm.closeLocationPicker() }
 
     val snap = {
         val needsPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
@@ -184,9 +197,12 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                         selectedHex = state.selectedHex,
                         panel = state.planePanel,
                         hits = vm.planeHits,
+                        skyView = settings.skyView,
                     )
                 } else null,
                 onClosePlane = vm::deselectPlane,
+                onOpenLocation = vm::openLocationPicker,
+                onToggleSky = { vm.setSkyView(!settings.skyView) },
                 bottomInset = extraStrips,
             )
         }
@@ -245,5 +261,16 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             onVault = onOpenVault,
             modifier = Modifier.align(Alignment.CenterEnd),
         )
+
+        if (state.locationPicker) {
+            LocationPickerScreen(
+                current = airspace.observer,
+                gps = airspace.gps,
+                busy = state.pickerBusy,
+                onPick = vm::chooseLocation,
+                onUseMyLocation = useMyLocation,
+                onClose = vm::closeLocationPicker,
+            )
+        }
     }
 }

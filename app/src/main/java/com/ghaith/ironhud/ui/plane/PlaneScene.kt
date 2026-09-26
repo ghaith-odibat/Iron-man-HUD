@@ -4,6 +4,9 @@ import com.ghaith.ironhud.PanelUi
 import com.ghaith.ironhud.airspace.AirspaceState
 import com.ghaith.ironhud.plane.Aircraft
 import com.ghaith.ironhud.plane.CameraOptics
+import com.ghaith.ironhud.plane.FlightRoute
+import com.ghaith.ironhud.plane.Projector
+import com.ghaith.ironhud.plane.RouteParsers
 import com.ghaith.ironhud.plane.PlaneHitIndex
 import com.ghaith.ironhud.ui.hud.SensorHub
 import java.util.Locale
@@ -20,8 +23,16 @@ class PlaneScene(
     val panel: PanelUi?,
     val hits: PlaneHitIndex?,
     val clock: () -> Long = System::currentTimeMillis,
+    /** Watching a chosen place with the virtual sky instead of the camera. */
+    val skyView: Boolean = false,
 ) {
     val selected: Aircraft? get() = selectedHex?.let { hex -> airspace.aircraft.firstOrNull { it.hex == hex } }
+
+    fun routeOf(a: Aircraft): FlightRoute? = a.callsign?.let { airspace.routes[RouteParsers.normalize(it)] }
+
+    /** Where the camera points, degrees from true north. */
+    fun headingDeg(): Double =
+        sensors.rot?.let { Projector.orientation(it, sensors.displayRotation, airspace.declinationDeg).headingDeg } ?: 0.0
 }
 
 object PlaneFormat {

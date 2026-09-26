@@ -14,6 +14,10 @@ import com.ghaith.ironhud.ai.Brief
 import com.ghaith.ironhud.airspace.AirspaceState
 import com.ghaith.ironhud.data.HudSettings
 import com.ghaith.ironhud.plane.Aircraft
+import com.ghaith.ironhud.plane.Airport
+import com.ghaith.ironhud.plane.FlightRoute
+import com.ghaith.ironhud.plane.ObserverPlace
+import com.ghaith.ironhud.plane.RouteSource
 import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.plane.FeedSource
 import com.ghaith.ironhud.plane.Geo
@@ -44,7 +48,9 @@ class PlaneModeScreenshotTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
 
-    private val viewer = GeoPoint(31.95, 35.93, 800.0)
+    private val amman = GeoPoint(31.95, 35.93, 800.0)
+    private val heathrow = ObserverPlace("London Heathrow Airport, London", 51.4700, -0.4543, 25.0)
+    private var viewer = amman
     private val now = 1_790_000_000_000L
 
     private fun at(eastKm: Double, northKm: Double): Pair<Double, Double> {
@@ -58,7 +64,7 @@ class PlaneModeScreenshotTest {
         return Aircraft(hex, cs, null, type, null, null, cat, lat, lon, altM, 420.0, track, vs, "2000", now, FeedSource.ADSB_LOL)
     }
 
-    private val traffic = listOf(
+    private fun traffic() = listOf(
         plane("740001", "RJA305", "A20N", "A3", 3.0, 15.0, 3_200.0, 250.0, -900.0).copy(registration = "JY-RNA"),
         plane("896002", "UAE17", "B77W", "A5", -8.0, 30.0, 10_600.0, 320.0),
         plane("740003", "JYHEL", null, "A7", -1.2, 4.0, 1_250.0, 90.0),
@@ -71,10 +77,31 @@ class PlaneModeScreenshotTest {
     fun planeModeLandscape() = render("plane_mode_landscape")
 
     @Test
+    @Config(qualifiers = "w1280dp-h800dp-land-xhdpi")
+    fun planeModeVirtualSky() = render("plane_mode_virtual_sky", observer = heathrow)
+
+    @Test
     @Config(qualifiers = "w800dp-h1280dp-port-xhdpi")
     fun planeModePortrait() = render("plane_mode_portrait")
 
-    private fun render(name: String) {
+    private fun airport(code: String, icao: String, name: String, city: String, cc: String, lat: Double, lon: Double) =
+        Airport(icao, code, name, city, cc, lat, lon)
+
+    private val routes = mapOf(
+        "RJA305" to FlightRoute(
+            airport("LHR", "EGLL", "London Heathrow Airport", "London", "GB", 51.4706, -0.4619),
+            airport("AMM", "OJAI", "Queen Alia International Airport", "Amman", "JO", 31.7226, 35.9932),
+            null, true, RouteSource.ADSB_LOL,
+        ),
+        "UAE17" to FlightRoute(
+            airport("DXB", "OMDB", "Dubai International Airport", "Dubai", "AE", 25.2528, 55.3644),
+            airport("LHR", "EGLL", "London Heathrow Airport", "London", "GB", 51.4706, -0.4619),
+            null, true, RouteSource.ADSBDB,
+        ),
+    )
+
+    private fun render(name: String, observer: ObserverPlace? = null) {
+        viewer = observer?.toGeo() ?: amman
         rule.mainClock.autoAdvance = false
         val sensors = SensorHub().apply {
             // Upright, camera facing (magnetic) north.
@@ -84,8 +111,9 @@ class PlaneModeScreenshotTest {
         val hits = PlaneHitIndex()
         val scene = PlaneScene(
             airspace = AirspaceState(
-                active = true, viewer = viewer, viewerAccuracyM = 6f, declinationDeg = 0.0,
-                aircraft = traffic, source = FeedSource.ADSB_LOL, lastUpdateMs = now - 3_000, status = "LIVE",
+                active = true, viewer = viewer, observer = observer, gps = amman, viewerAccuracyM = 6f, declinationDeg = 0.0,
+                aircraft = traffic(), source = FeedSource.ADSB_LOL, lastUpdateMs = now - 3_000, status = "LIVE",
+                routes = routes,
             ),
             sensors = sensors,
             optics = CameraOptics(),
@@ -102,6 +130,7 @@ class PlaneModeScreenshotTest {
             ),
             hits = hits,
             clock = { now },
+            skyView = observer != null,
         )
 
         rule.setContent {

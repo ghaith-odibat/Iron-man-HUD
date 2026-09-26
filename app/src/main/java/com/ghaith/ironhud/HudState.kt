@@ -79,5 +79,8 @@ data class HudState(
     val selectedHex: String? = null,
     val planePanel: PanelUi? = null,
     val optics: CameraOptics = CameraOptics(),
+    /** Plane Mode observer-location map is open / resolving the picked point. */
+    val locationPicker: Boolean = false,
+    val pickerBusy: Boolean = false,
     val toast: String? = null,
 )

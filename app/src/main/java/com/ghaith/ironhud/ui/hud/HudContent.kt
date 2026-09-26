@@ -54,6 +54,7 @@ import com.ghaith.ironhud.ui.plane.PlaneLayer
 import com.ghaith.ironhud.ui.plane.PlanePanel
 import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.plane.RadarScope
+import com.ghaith.ironhud.ui.plane.VirtualSky
 import com.ghaith.ironhud.ui.theme.Hud
 
 /** Everything drawn over the camera. Stateless, so it can be rendered in tests without a camera. */
@@ -71,6 +72,8 @@ fun HudContent(
     /** Non-null in Plane Mode: aircraft overlays replace object scanning. */
     plane: PlaneScene? = null,
     onClosePlane: () -> Unit = {},
+    onOpenLocation: () -> Unit = {},
+    onToggleSky: () -> Unit = {},
     /** Extra height taken by control strips at the bottom (portrait cards move up by this). */
     bottomInset: Dp = 0.dp,
 ) {
@@ -85,6 +88,10 @@ fun HudContent(
 
         val lastPanel = remember { mutableStateOf<PanelUi?>(null) }
         SideEffect { if (state.panel != null) lastPanel.value = state.panel }
+
+        if (plane != null && plane.airspace.isVirtual && plane.skyView) {
+            VirtualSky(plane, Modifier.fillMaxSize(), animate = animate)
+        }
 
         HudOverlay(
             attitude = attitude,
@@ -110,7 +117,13 @@ fun HudContent(
                 animate = animate,
             )
             // Portrait is narrow: drop the status line below the uplink read-out.
-            AirspaceStatus(plane, Modifier.align(Alignment.TopCenter).padding(top = if (landscape) 96.dp else 132.dp))
+            Column(
+                Modifier.align(Alignment.TopCenter).padding(top = if (landscape) 96.dp else 132.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AirspaceStatus(plane)
+                ObserverBar(plane, onOpenLocation, onToggleSky, Modifier.padding(top = 6.dp))
+            }
             val selected = plane.selected
             AnimatedVisibility(
                 visible = selected != null,
@@ -127,6 +140,7 @@ fun HudContent(
                         aircraft = selected,
                         viewer = plane.airspace.viewer,
                         panel = plane.panel,
+                        route = plane.routeOf(selected),
                         onClose = onClosePlane,
                         modifier = Modifier
                             .width(panelWidth)
@@ -363,5 +377,34 @@ fun FocusMarkerView(marker: FocusMarker, modifier: Modifier = Modifier) {
         }
         val m = tm.measure(label, Hud.text(10.sp, alpha = alpha, weight = FontWeight.Bold, glow = false))
         drawText(m, topLeft = Offset(c.x - m.size.width / 2f, c.y + half + 4.dp.toPx()))
+    }
+}
+
+/** "◎ OBSERVER: LONDON HEATHROW AIRPORT · VIRTUAL" (tap to change) plus the SKY/CAM switch. */
+@Composable
+private fun ObserverBar(plane: PlaneScene, onOpenLocation: () -> Unit, onToggleSky: () -> Unit, modifier: Modifier = Modifier) {
+    val observer = plane.airspace.observer
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val text = if (observer == null) "◎ OBSERVER: MY LOCATION (GPS)  ·  CHANGE"
+        else "◎ OBSERVER: ${observer.name.uppercase().take(34)}  ·  VIRTUAL  ·  CHANGE"
+        BasicText(
+            text,
+            style = Hud.text(11.sp, weight = FontWeight.Bold),
+            modifier = Modifier
+                .border(1.dp, Hud.blue(0.7f), CutCornerShape(topStart = 6.dp, bottomEnd = 6.dp))
+                .background(Hud.Black.copy(alpha = 0.4f), CutCornerShape(topStart = 6.dp, bottomEnd = 6.dp))
+                .clickable(onClick = onOpenLocation)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+        if (observer != null) {
+            BasicText(
+                if (plane.skyView) "SKY ▸ CAM" else "CAM ▸ SKY",
+                style = Hud.text(11.sp, weight = FontWeight.Bold),
+                modifier = Modifier
+                    .border(1.dp, Hud.blue(0.7f))
+                    .clickable(onClick = onToggleSky)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
     }
 }

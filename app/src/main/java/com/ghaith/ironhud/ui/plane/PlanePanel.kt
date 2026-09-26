@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghaith.ironhud.PanelUi
 import com.ghaith.ironhud.plane.Aircraft
+import com.ghaith.ironhud.plane.Airport
+import com.ghaith.ironhud.plane.FlightRoute
 import com.ghaith.ironhud.plane.AircraftInfo
 import com.ghaith.ironhud.plane.AircraftModels
 import com.ghaith.ironhud.plane.Geo
@@ -57,6 +59,7 @@ fun PlanePanel(
     aircraft: Aircraft,
     viewer: GeoPoint?,
     panel: PanelUi?,
+    route: FlightRoute?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
@@ -97,6 +100,8 @@ fun PlanePanel(
             (AircraftInfo.airline(aircraft) ?: "UNKNOWN OPERATOR").uppercase(Locale.US),
             style = Hud.text(12.sp, alpha = 0.85f, spacing = 1.5.sp),
         )
+
+        RouteBlock(route, aircraft, Modifier.padding(top = 10.dp))
 
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(Modifier.weight(1f)) {
@@ -196,5 +201,60 @@ fun Turntable(mesh: WireMesh, yawDeg: Float, modifier: Modifier = Modifier) {
         }
         drawPath(path, Hud.blue(0.22f), style = Stroke(4.dp.toPx(), cap = StrokeCap.Round))
         drawPath(path, Hud.Blue, style = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round))
+    }
+}
+
+/** FROM → TO with airport names and how far along the flight is. */
+@Composable
+private fun RouteBlock(route: FlightRoute?, aircraft: Aircraft, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
+        if (route == null) {
+            BasicText(
+                if (aircraft.callsign.isNullOrBlank()) "ROUTE · NO CALLSIGN" else "ROUTE · LOOKING UP / NOT IN DATABASE",
+                style = Hud.text(10.sp, alpha = 0.5f, glow = false, spacing = 1.sp),
+            )
+            return@Column
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AirportCell("FROM", route.origin, Modifier.weight(1f))
+            BasicText("  ✈  ", style = Hud.text(16.sp, weight = FontWeight.Bold))
+            AirportCell("TO", route.destination, Modifier.weight(1f), alignEnd = true)
+        }
+        val progress = route.progress(aircraft.lat, aircraft.lon)
+        if (progress != null) {
+            Canvas(Modifier.fillMaxWidth().padding(top = 6.dp).height(12.dp)) {
+                val y = size.height / 2
+                drawLine(Hud.blue(0.25f), Offset(0f, y), Offset(size.width, y), 2.dp.toPx())
+                val x = size.width * progress.toFloat()
+                drawLine(Hud.Blue, Offset(0f, y), Offset(x, y), 3.dp.toPx())
+                drawCircle(Hud.Blue, 5.dp.toPx(), Offset(x, y))
+                drawCircle(Hud.blue(0.6f), 3.dp.toPx(), Offset(0f, y))
+                drawCircle(Hud.blue(0.6f), 3.dp.toPx(), Offset(size.width, y))
+            }
+        }
+        BasicText(
+            listOfNotNull(
+                progress?.let { "${(it * 100).roundToInt()}% FLOWN" },
+                route.midpoint?.let { "VIA ${it.code}" },
+                "SCHEDULED ROUTE · ${route.source.display}" + if (route.plausible) "" else " · UNCONFIRMED",
+            ).joinToString("  ·  "),
+            style = Hud.text(9.sp, alpha = if (route.plausible) 0.6f else 0.4f, glow = false, spacing = 1.sp),
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun AirportCell(label: String, airport: Airport, modifier: Modifier = Modifier, alignEnd: Boolean = false) {
+    Column(modifier, horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start) {
+        BasicText("$label  ${airport.code}", style = Hud.text(18.sp, weight = FontWeight.Bold, spacing = 1.sp))
+        BasicText(
+            listOfNotNull(airport.city, airport.country).joinToString(", ").ifBlank { airport.icao ?: "" }.uppercase(Locale.US),
+            style = Hud.text(10.sp, alpha = 0.75f, glow = false),
+            maxLines = 1,
+        )
+        airport.name?.let {
+            BasicText(it, style = Hud.text(10.sp, alpha = 0.55f, glow = false), maxLines = 1)
+        }
     }
 }

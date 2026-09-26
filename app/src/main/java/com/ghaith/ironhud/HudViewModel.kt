@@ -14,7 +14,9 @@ import com.ghaith.ironhud.airspace.AirspaceState
 import com.ghaith.ironhud.airspace.AirspaceTracker
 import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.plane.PlaneHitIndex
+import com.ghaith.ironhud.plane.ObserverClient
 import com.ghaith.ironhud.plane.PlanePrompt
+import com.ghaith.ironhud.plane.RouteParsers
 import com.ghaith.ironhud.ai.Brief
 import com.ghaith.ironhud.ai.Http
 import com.ghaith.ironhud.ai.IdentifyService
@@ -41,6 +43,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -59,6 +63,7 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     private val http = Http.newClient()
     private val identifier = IdentifyService(pool, http, modelOverrides = { modelOverrides.value })
     private val airspaceTracker = AirspaceTracker(app, http, viewModelScope)
+    private val observerClient = ObserverClient(http)
     val airspace: StateFlow<AirspaceState> = airspaceTracker.state
     /** Screen positions of the planes drawn last frame (written by the plane layer). */
     val planeHits = PlaneHitIndex()
@@ -105,6 +110,10 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
                 delay(1_500)
                 settingsRepo.saveKeyStatus(pool.exportStatus())
             }
+        }
+        viewModelScope.launch {
+            // The saved Plane Mode observer (a chosen place, or GPS) follows the settings.
+            settingsRepo.settings.map { it.planeObserver }.distinctUntilChanged().collect { airspaceTracker.setObserver(it) }
         }
         viewModelScope.launch {
             while (isActive) {
@@ -233,6 +242,36 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- observer location ---------------------------------------------------------------------------
+
+    fun openLocationPicker() = _state.update { it.copy(locationPicker = true) }
+
+    fun closeLocationPicker() = _state.update { it.copy(locationPicker = false, pickerBusy = false) }
+
+    /** Watch the sky from a point picked on the map: name it and find its ground height, then switch. */
+    fun chooseLocation(lat: Double, lon: Double) {
+        _state.update { it.copy(pickerBusy = true) }
+        viewModelScope.launch {
+            val place = observerClient.describe(lat, lon)
+            settingsRepo.setPlaneObserver(place)
+            deselectPlane()
+            _state.update { it.copy(pickerBusy = false, locationPicker = false) }
+            toast("OBSERVER · ${place.name.uppercase(Locale.US).take(40)}")
+        }
+    }
+
+    /** Back to the tablet's own GPS position (the UI makes sure location permission is granted first). */
+    fun useMyLocation() {
+        viewModelScope.launch {
+            settingsRepo.setPlaneObserver(null)
+            deselectPlane()
+            _state.update { it.copy(locationPicker = false) }
+            toast("OBSERVER · MY LOCATION")
+        }
+    }
+
+    fun setSkyView(on: Boolean) = viewModelScope.launch { settingsRepo.setSkyView(on) }
+
     fun deselectPlane() {
         planeBriefJob?.cancel()
         jarvis.stop()
@@ -244,7 +283,8 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         val aircraft = airspace.value.aircraft.firstOrNull { it.hex == hex } ?: return
         planeBriefJob?.cancel()
         jarvis.stop()
-        val key = PlanePrompt.cacheKey(aircraft)
+        val route = aircraft.callsign?.let { airspace.value.routes[RouteParsers.normalize(it)] }
+        val key = PlanePrompt.cacheKey(aircraft, route)
         planeBriefCache[key]?.let { cached ->
             _state.update { it.copy(selectedHex = hex, planePanel = cached.copy(fromCache = true)) }
             if (settings.value.voice) jarvis.speak(cached.brief)
@@ -252,7 +292,7 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.update { it.copy(selectedHex = hex, planePanel = PanelUi(status = "QUERYING J.A.R.V.I.S.")) }
         planeBriefJob = viewModelScope.launch {
-            identifier.describe(Prompt.AIRCRAFT_SYSTEM, PlanePrompt.user(aircraft, airspace.value.viewer)).collect { event ->
+            identifier.describe(Prompt.AIRCRAFT_SYSTEM, PlanePrompt.user(aircraft, airspace.value.viewer, route)).collect { event ->
                 when (event) {
                     is ScanEvent.Attempt -> updatePlanePanel {
                         it.copy(status = "UPLINK ${event.provider.display} · KEY ${event.keyIndex}/${event.keyCount}")

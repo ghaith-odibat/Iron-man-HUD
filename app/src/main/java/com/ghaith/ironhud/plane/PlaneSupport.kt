@@ -20,7 +20,7 @@ class PlaneHitIndex {
 
 object PlanePrompt {
     /** The live facts handed to the AI for a plane brief. */
-    fun user(a: Aircraft, viewer: GeoPoint?): String = buildString {
+    fun user(a: Aircraft, viewer: GeoPoint?, route: FlightRoute? = null): String = buildString {
         append("Callsign: ").append(a.callsign ?: "unknown").append('\n')
         AircraftInfo.airline(a)?.let { append("Airline/operator: ").append(it).append('\n') }
         val type = AircraftInfo.typeName(a)
@@ -28,6 +28,11 @@ object PlanePrompt {
         a.typeCode?.let { append(" (ICAO ").append(it).append(')') }
         append('\n')
         a.registration?.let { append("Registration: ").append(it).append('\n') }
+        route?.let { r ->
+            fun ap(x: Airport) = listOfNotNull(x.name, x.city, x.country).joinToString(", ") + " (${x.code})"
+            append("Scheduled route (from a route database, may differ): ")
+                .append(ap(r.origin)).append(" → ").append(ap(r.destination)).append('\n')
+        }
         AircraftInfo.categoryName(a.category)?.let { append("Category: ").append(it.lowercase(Locale.US)).append('\n') }
         append("Altitude: ").append(a.altFt.roundToInt()).append(" ft\n")
         a.gsKt?.let { append("Ground speed: ").append(it.roundToInt()).append(" kt\n") }
@@ -41,5 +46,6 @@ object PlanePrompt {
     }
 
     /** Cache key: briefs are about the type and the operator, not the exact position. */
-    fun cacheKey(a: Aircraft): String = "${a.typeCode}|${AircraftInfo.airline(a)}|${a.callsign}"
+    fun cacheKey(a: Aircraft, route: FlightRoute? = null): String =
+        "${a.typeCode}|${AircraftInfo.airline(a)}|${a.callsign}|${route?.short}"
 }

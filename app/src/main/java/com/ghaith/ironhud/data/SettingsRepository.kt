@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ghaith.ironhud.ai.KeyStatus
 import com.ghaith.ironhud.ai.ProviderId
+import com.ghaith.ironhud.plane.ObserverPlace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.MapSerializer
@@ -25,6 +26,10 @@ data class HudSettings(
     /** Per-provider model override; blank or "auto" means the default. */
     val models: Map<ProviderId, String> = emptyMap(),
     val keyStatus: Map<String, KeyStatus> = emptyMap(),
+    /** Plane Mode observer: a chosen place, or null to use GPS. */
+    val planeObserver: ObserverPlace? = null,
+    /** Plane Mode at a chosen place: draw a virtual sky instead of the camera feed. */
+    val skyView: Boolean = true,
 )
 
 class SettingsRepository(context: Context) {
@@ -48,6 +53,8 @@ class SettingsRepository(context: Context) {
             }.orEmpty(),
             keyStatus = p[STATUS]?.let { raw -> runCatching { json.decodeFromString(statusSerializer, raw) }.getOrNull() }
                 .orEmpty(),
+            planeObserver = p[OBSERVER]?.let { raw -> runCatching { json.decodeFromString(ObserverPlace.serializer(), raw) }.getOrNull() },
+            skyView = p[SKY_VIEW] ?: true,
         )
     }
 
@@ -61,6 +68,16 @@ class SettingsRepository(context: Context) {
         p[MODELS] = json.encodeToString(modelSerializer, current + (provider.name to model.trim()))
     }
 
+    suspend fun setPlaneObserver(place: ObserverPlace?) = store.edit {
+        if (place == null) {
+            it.remove(OBSERVER)
+        } else {
+            it[OBSERVER] = json.encodeToString(ObserverPlace.serializer(), place)
+        }
+    }
+
+    suspend fun setSkyView(on: Boolean) = store.edit { it[SKY_VIEW] = on }
+
     suspend fun saveKeyStatus(status: Map<String, KeyStatus>) = store.edit {
         it[STATUS] = json.encodeToString(statusSerializer, status)
     }
@@ -72,5 +89,7 @@ class SettingsRepository(context: Context) {
         val ORDER = stringPreferencesKey("provider_order")
         val MODELS = stringPreferencesKey("models")
         val STATUS = stringPreferencesKey("key_status")
+        val OBSERVER = stringPreferencesKey("plane_observer")
+        val SKY_VIEW = booleanPreferencesKey("sky_view")
     }
 }

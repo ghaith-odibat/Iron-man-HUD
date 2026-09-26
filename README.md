@@ -49,10 +49,21 @@ Tap **PLANE** to see live aircraft through the camera:
 * **Tap a plane:** a card opens with airline, aircraft type, registration, altitude, speed,
   heading, vertical speed, distance, bearing and squawk. It includes a spinning 3D model, and
   J.A.R.V.I.S. adds an AI brief (using your Vault keys; cached).
+* **Routes:** every airline flight shows its departure and arrival airports (e.g. `AMM → LHR`) on
+  its tag. The card shows full FROM/TO names with a "% flown" bar. Routes are looked up by
+  callsign from adsb.lol and adsbdb (scheduled-route databases, free), so they can occasionally
+  differ from the real flight.
+* **Watch from anywhere:** tap the `◎ OBSERVER` chip under the status line to open a world map
+  and tap any spot to watch the sky from there, or choose **Use my current location**. At a
+  chosen place the camera is replaced by a virtual HUD sky (horizon, altitude rings, compass
+  spokes) that you still look around by turning the tablet. **SKY ▸ CAM** switches back to the
+  camera. The choice is remembered. Map © OpenStreetMap contributors; place names from Photon;
+  elevation from Open-Meteo.
 * **Live data:** adsb.lol, adsb.fi, then the OpenSky Network. They are free, need no key, and the
   app switches automatically if one fails. Data © adsb.lol (ODbL), adsb.fi and The OpenSky
   Network, for personal, non-commercial use.
-* **Needs:** location permission (asked the first time), GPS and internet.
+* **Needs:** internet. For your own location it also needs location permission (asked the first
+  time) and GPS; a chosen place works without either.
 * **Accuracy:** where planes appear depends on the tablet's compass (typically ±5–15°). The status
   line shows `HDG ±N°`. If it asks you to calibrate, wave the tablet in a figure 8 away from metal
   and magnets.
