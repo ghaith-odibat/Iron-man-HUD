@@ -238,6 +238,7 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                     onPlus = { vm.stepNightGain(up = true) },
                     onSet = vm::setNightGain,
                     onReset = { vm.setNightGain(NightVision.DEFAULT_FRACTION) },
+                    width = 320.dp,
                 )
             }
             if (showFocusStrip) {

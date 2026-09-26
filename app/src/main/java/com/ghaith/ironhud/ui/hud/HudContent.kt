@@ -386,13 +386,15 @@ fun HudSliderStrip(
     modifier: Modifier = Modifier,
     minusLabel: String = "−",
     plusLabel: String = "+",
+    /** Width of the title + bar block; wider for long read-outs. */
+    width: Dp = 190.dp,
 ) {
     val set by rememberUpdatedState(onSet)
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         HudButton(minusLabel, active = true, onClick = onMinus, modifier = Modifier.width(56.dp))
         Column(
             Modifier
-                .width(190.dp)
+                .width(width)
                 .background(Hud.Black.copy(alpha = 0.35f))
                 .border(1.dp, Hud.blue(0.5f))
                 .padding(horizontal = 10.dp, vertical = 5.dp),
