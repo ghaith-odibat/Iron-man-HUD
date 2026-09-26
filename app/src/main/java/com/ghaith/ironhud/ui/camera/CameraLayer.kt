@@ -1,14 +1,19 @@
 package com.ghaith.ironhud.ui.camera
 
 import android.graphics.ColorMatrixColorFilter
-import android.hardware.camera2.CameraCharacteristics
-import androidx.annotation.OptIn
-import androidx.camera.camera2.interop.Camera2CameraInfo
-import androidx.camera.camera2.interop.ExperimentalCamera2Interop
-import androidx.camera.core.CameraInfo
 import android.graphics.Paint
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
 import android.view.View
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.CameraControl
+import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.TorchState
 import androidx.camera.core.ZoomState
@@ -19,14 +24,18 @@ import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.ghaith.ironhud.FocusRequest
 import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.ui.theme.Hud
 import com.ghaith.ironhud.vision.TrackedObject
@@ -48,6 +57,12 @@ fun CameraLayer(
     zoomTarget: Float?,
     onZoomState: (ratio: Float, min: Float, max: Float) -> Unit,
     onOptics: (CameraOptics) -> Unit,
+    torchLevel: Int?,
+    onTorchLevel: (max: Int, level: Int) -> Unit,
+    focusRequest: FocusRequest?,
+    onFocusResult: (id: Int, success: Boolean) -> Unit,
+    manualFocus: Float?,
+    focusResetSeq: Int,
     onPreviewView: (PreviewView?) -> Unit,
     onObjects: (List<TrackedObject>) -> Unit,
     modifier: Modifier = Modifier,
@@ -55,6 +70,8 @@ fun CameraLayer(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestOnObjects = rememberUpdatedState(onObjects)
+    val previewRef = remember { mutableStateOf<PreviewView?>(null) }
+    var minFocusDiopters by remember { mutableStateOf<Float?>(null) }
 
     val detector = remember {
         ObjectDetection.getClient(
@@ -107,7 +124,55 @@ fun CameraLayer(
             waited += 200
             info = cameraController.cameraInfo
         }
-        if (info != null) onOptics(readOptics(info))
+        if (info != null) {
+            val optics = readOptics(info)
+            minFocusDiopters = optics.minFocusDiopters
+            onOptics(optics)
+            // Torch brightness (CameraX 1.5; needs hardware support, typically Android 15+).
+            val max = runCatching { info.maxTorchStrengthLevel }.getOrDefault(1).coerceAtLeast(1)
+            onTorchLevel(max, runCatching { info.torchStrengthLevel.value }.getOrNull() ?: max)
+            if (max > 1) info.torchStrengthLevel.observe(lifecycleOwner) { level -> onTorchLevel(max, level ?: max) }
+        }
+    }
+
+    LaunchedEffect(torchLevel) {
+        if (torch && torchLevel != null) {
+            runCatching { cameraController.cameraControl?.setTorchStrengthLevel(torchLevel) }
+        }
+    }
+
+    // Long-press focus: meter AF/AE on that point and keep it locked until the user resets.
+    LaunchedEffect(focusRequest) {
+        val req = focusRequest ?: return@LaunchedEffect
+        val view = previewRef.value
+        val control = cameraController.cameraControl
+        if (view == null || control == null) {
+            onFocusResult(req.id, false)
+            return@LaunchedEffect
+        }
+        val point = view.meteringPointFactory.createPoint(req.x, req.y)
+        val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+            .disableAutoCancel()
+            .build()
+        val future = runCatching { control.startFocusAndMetering(action) }.getOrNull()
+        if (future == null) {
+            onFocusResult(req.id, false)
+            return@LaunchedEffect
+        }
+        future.addListener(
+            { onFocusResult(req.id, runCatching { future.get().isFocusSuccessful }.getOrDefault(false)) },
+            ContextCompat.getMainExecutor(context),
+        )
+    }
+
+    LaunchedEffect(focusResetSeq) {
+        if (focusResetSeq > 0) runCatching { cameraController.cameraControl?.cancelFocusAndMetering() }
+    }
+
+    // Manual focus distance via Camera2 (AF off + LENS_FOCUS_DISTANCE); null returns to autofocus.
+    LaunchedEffect(manualFocus, minFocusDiopters) {
+        val control = cameraController.cameraControl ?: return@LaunchedEffect
+        runCatching { applyManualFocus(control, manualFocus, minFocusDiopters) }
     }
 
     // Flashlight: wait for the camera to be bound, then check it actually has a flash unit.
@@ -122,7 +187,12 @@ fun CameraLayer(
         when {
             info == null -> if (torch) onTorchUnavailable()
             !info.hasFlashUnit() -> if (torch) onTorchUnavailable()
-            else -> cameraController.enableTorch(torch)
+            else -> {
+                cameraController.enableTorch(torch)
+                if (torch && torchLevel != null && runCatching { info.maxTorchStrengthLevel }.getOrDefault(1) > 1) {
+                    runCatching { cameraController.cameraControl?.setTorchStrengthLevel(torchLevel) }
+                }
+            }
         }
     }
     DisposableEffect(Unit) {
@@ -140,6 +210,7 @@ fun CameraLayer(
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 scaleType = PreviewView.ScaleType.FILL_CENTER
                 controller = cameraController
+                previewRef.value = this
                 onPreviewView(this)
             }
         },
@@ -152,8 +223,27 @@ private fun readOptics(info: CameraInfo): CameraOptics = runCatching {
     val c2 = Camera2CameraInfo.from(info)
     val focal = c2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
     val size = c2.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
-    CameraOptics(focal, size?.width, size?.height)
+    val minFocus = c2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)
+    CameraOptics(focal, size?.width, size?.height, minFocus)
 }.getOrDefault(CameraOptics())
+
+@OptIn(ExperimentalCamera2Interop::class)
+private fun applyManualFocus(control: CameraControl, fraction: Float?, minDiopters: Float?) {
+    val c2 = Camera2CameraControl.from(control)
+    if (fraction == null || minDiopters == null || minDiopters <= 0f) {
+        c2.clearCaptureRequestOptions()
+        return
+    }
+    control.cancelFocusAndMetering()
+    // Square curve: finer steps at the far end, where most things are.
+    val diopters = minDiopters * (1 - fraction) * (1 - fraction)
+    c2.setCaptureRequestOptions(
+        CaptureRequestOptions.Builder()
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            .setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, diopters)
+            .build()
+    )
+}
 
 private fun applyTint(view: View, tint: Boolean) {
     if (tint) {

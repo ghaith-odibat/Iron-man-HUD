@@ -102,4 +102,10 @@ object Projector {
 }
 
 /** Back-camera lens facts needed to size the projection (null when the device doesn't say). */
-data class CameraOptics(val focalMm: Float? = null, val sensorWmm: Float? = null, val sensorHmm: Float? = null)
+data class CameraOptics(
+    val focalMm: Float? = null,
+    val sensorWmm: Float? = null,
+    val sensorHmm: Float? = null,
+    /** Closest focus in diopters (1/m); null or 0 means a fixed-focus lens. */
+    val minFocusDiopters: Float? = null,
+)

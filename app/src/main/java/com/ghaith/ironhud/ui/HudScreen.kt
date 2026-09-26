@@ -9,9 +9,11 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -34,17 +36,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ghaith.ironhud.FocusStatus
 import com.ghaith.ironhud.HudViewModel
 import com.ghaith.ironhud.capture.HudCapture
 import com.ghaith.ironhud.ui.camera.CameraLayer
 import com.ghaith.ironhud.ui.hud.ControlRail
 import com.ghaith.ironhud.ui.hud.HudContent
+import com.ghaith.ironhud.ui.hud.HudSliderStrip
 import com.ghaith.ironhud.ui.hud.ZoomControl
-import com.ghaith.ironhud.ui.hud.rememberSensorHub
-import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.hud.rememberBatteryPercent
 import com.ghaith.ironhud.ui.hud.rememberClock
+import com.ghaith.ironhud.ui.hud.rememberSensorHub
+import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.theme.Hud
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -115,6 +120,10 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
         if (needsPermission) storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) else capture()
     }
 
+    val showFocusStrip = state.focusStrip
+    val showLightStrip = state.torch && state.torchMaxLevel > 1
+    val extraStrips = 58.dp * ((if (showFocusStrip) 1 else 0) + (if (showLightStrip) 1 else 0))
+
     Box(
         Modifier
             .fillMaxSize()
@@ -129,6 +138,12 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             zoomTarget = state.zoomTarget,
             onZoomState = vm::onZoomState,
             onOptics = vm::onOptics,
+            torchLevel = state.torchLevelTarget,
+            onTorchLevel = vm::onTorchLevel,
+            focusRequest = state.focusRequest,
+            onFocusResult = vm::onFocusResult,
+            manualFocus = state.manualFocus,
+            focusResetSeq = state.focusResetSeq,
             onPreviewView = { view ->
                 previewView.value = view
                 vm.frameSource = view?.let { v -> { v.bitmap } }
@@ -145,7 +160,8 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                     overlayLayer.record { this@drawWithContent.drawContent() }
                     drawLayer(overlayLayer)
                 }
-                .pointerInput(Unit) { detectTapGestures(onTap = vm::onTap) }
+                // Tap identifies; long-press focuses (and locks focus) on that spot.
+                .pointerInput(Unit) { detectTapGestures(onTap = vm::onTap, onLongPress = vm::focusAt) }
                 // Two-finger pinch zooms the camera.
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoom, _ -> if (zoom != 1f) vm.zoomBy(zoom) }
@@ -171,24 +187,55 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                     )
                 } else null,
                 onClosePlane = vm::deselectPlane,
+                bottomInset = extraStrips,
             )
         }
 
-        ZoomControl(
-            zoom = state.zoom,
-            min = state.zoomMin,
-            max = state.zoomMax,
-            onZoomOut = { vm.zoomStep(zoomIn = false) },
-            onZoomIn = { vm.zoomStep(zoomIn = true) },
-            onReset = vm::resetZoom,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp),
-        )
+        Column(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (showFocusStrip) {
+                HudSliderStrip(
+                    title = "FOCUS ${vm.focusLabel(state)}",
+                    fraction = state.manualFocus ?: 1f,
+                    onMinus = { vm.stepFocus(farther = false) },
+                    onPlus = { vm.stepFocus(farther = true) },
+                    onSet = vm::setManualFocus,
+                    onReset = vm::resetFocus,
+                    minusLabel = "NEAR",
+                    plusLabel = "FAR",
+                )
+            }
+            if (showLightStrip) {
+                val max = state.torchMaxLevel
+                HudSliderStrip(
+                    title = "LIGHT ${(100f * state.torchLevel / max).roundToInt()}%",
+                    fraction = (state.torchLevel - 1f) / (max - 1f),
+                    onMinus = { vm.stepTorch(up = false) },
+                    onPlus = { vm.stepTorch(up = true) },
+                    onSet = vm::setTorchFraction,
+                    onReset = { vm.setTorchFraction(1f) },
+                )
+            }
+            ZoomControl(
+                zoom = state.zoom,
+                min = state.zoomMin,
+                max = state.zoomMax,
+                onZoomOut = { vm.zoomStep(zoomIn = false) },
+                onZoomIn = { vm.zoomStep(zoomIn = true) },
+                onReset = vm::resetZoom,
+            )
+        }
 
         ControlRail(
             settings = settings,
             torch = state.torch,
             planeMode = state.planeMode,
             onPlane = togglePlane,
+            focusActive = state.focusStrip || state.manualFocus != null || state.focusMarker?.status == FocusStatus.LOCKED,
+            onFocus = vm::toggleFocusStrip,
             onScan = vm::scanCenter,
             onVoice = { vm.setVoice(!settings.voice) },
             onTint = { vm.setTint(!settings.tint) },

@@ -83,6 +83,7 @@ class HudScreenshotTest {
                 wireframe = EdgeWireframe.render(syntheticWheel()).asImageBitmap(),
             ),
             uplink = Uplink(ProviderId.GEMINI, 2, 3, 3, 4),
+            focusMarker = FocusMarker(1, w * 0.3f, h * 0.78f, FocusStatus.LOCKED),
         )
 
         rule.setContent {

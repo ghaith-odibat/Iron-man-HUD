@@ -9,6 +9,12 @@ import com.ghaith.ironhud.vision.TrackedObject
 
 enum class LockPhase { ANALYZING, LOCKED, OFFLINE }
 
+data class FocusRequest(val id: Int, val x: Float, val y: Float)
+
+enum class FocusStatus { FOCUSING, LOCKED, FAILED }
+
+data class FocusMarker(val id: Int, val x: Float, val y: Float, val status: FocusStatus)
+
 data class LockUi(val targetId: Int?, val box: Rect, val phase: LockPhase)
 
 /** The brief panel (the Santa-Monica-Ferris-wheel box from the reference shot). */
@@ -50,6 +56,17 @@ data class HudState(
     val uplink: Uplink = Uplink(),
     /** Flashlight (camera torch) on. Mirrors the camera's real torch state. */
     val torch: Boolean = false,
+    /** Torch brightness: levels 1..[torchMaxLevel]; a max of 1 means the hardware only does on/off. */
+    val torchMaxLevel: Int = 1,
+    val torchLevel: Int = 1,
+    val torchLevelTarget: Int? = null,
+    /** Focus: the manual strip, a manual distance (0 = nearest … 1 = infinity; null = autofocus),
+     *  a pending tap-to-focus request, its on-screen marker, and a counter that releases an AF lock. */
+    val focusStrip: Boolean = false,
+    val manualFocus: Float? = null,
+    val focusRequest: FocusRequest? = null,
+    val focusMarker: FocusMarker? = null,
+    val focusResetSeq: Int = 0,
     /** Camera zoom as reported by the camera, and the range it supports. */
     val zoom: Float = 1f,
     val zoomMin: Float = 1f,

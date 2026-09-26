@@ -25,7 +25,11 @@ Everything is drawn in a single colour, light tech blue (`#66D9FF`).
 * **Hologram tint:** renders the camera feed itself in HUD blue.
 * **Zoom:** pinch anywhere, or use the − / + strip at the bottom, to zoom up to the camera's maximum.
   Tap the readout to jump back to 1×.
-* **LIGHT:** switches the tablet's flashlight on or off for scanning in the dark.
+* **LIGHT:** switches the tablet's flashlight on or off for scanning in the dark. While it's on, a
+  strip lets you dim or brighten it. Brightness control needs hardware support (usually Android 15+);
+  otherwise the app says the torch is fixed.
+* **Focus:** long-press anywhere to focus and lock there (AF-L). **FOCUS** opens a manual NEAR ↔ FAR
+  strip showing the focus distance; tap its readout to return to autofocus.
 * **SNAP:** saves the camera frame plus the HUD overlay to `Pictures/IronHUD`.
 * **HUD chrome:** compass tape from the rotation sensor, artificial horizon, clock, battery,
   uplink status and a scan sweep.
@@ -76,7 +80,9 @@ key.
 | **SCAN** | Identify what is under the reticle now |
 | **RESCAN** / **✕** on the card | Query again / close the card |
 | **VOICE**, **TINT**, **AUTO** | Toggle voice read-out, hologram tint, auto-lock |
-| **LIGHT** | Turn the device flashlight (camera torch) on/off |
+| **LIGHT** | Turn the device flashlight (camera torch) on/off; while on, a LIGHT strip sets its brightness (on supported hardware) |
+| **Long-press** anywhere | Focus and lock focus/exposure on that spot (AF-L) |
+| **FOCUS** | Manual focus strip: NEAR ↔ FAR with the distance shown; tap the FOCUS readout to go back to autofocus |
 | **PLANE** | Plane Mode: live aircraft as 3D holograms + radar; tap a plane for its card |
 | Pinch with two fingers / **−** **+** | Zoom out / in (tap the ZOOM readout to go back to 1×) |
 | **SNAP** | Save a screenshot with the HUD |

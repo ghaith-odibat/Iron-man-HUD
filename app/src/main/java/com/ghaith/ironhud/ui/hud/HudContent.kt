@@ -7,9 +7,12 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,16 +29,24 @@ import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
+import com.ghaith.ironhud.FocusMarker
+import com.ghaith.ironhud.FocusStatus
 import com.ghaith.ironhud.HudState
 import com.ghaith.ironhud.PanelUi
 import com.ghaith.ironhud.data.HudSettings
@@ -60,6 +71,8 @@ fun HudContent(
     /** Non-null in Plane Mode: aircraft overlays replace object scanning. */
     plane: PlaneScene? = null,
     onClosePlane: () -> Unit = {},
+    /** Extra height taken by control strips at the bottom (portrait cards move up by this). */
+    bottomInset: Dp = 0.dp,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
@@ -104,7 +117,7 @@ fun HudContent(
                 modifier = if (landscape) {
                     Modifier.align(Alignment.CenterStart).padding(start = 20.dp, top = 40.dp, bottom = 40.dp)
                 } else {
-                    Modifier.align(Alignment.BottomEnd).padding(bottom = 230.dp, start = 16.dp, end = 16.dp)
+                    Modifier.align(Alignment.BottomEnd).padding(bottom = 230.dp + bottomInset, start = 16.dp, end = 16.dp)
                 },
                 enter = if (landscape) slideInHorizontally { -it } + fadeIn() else slideInVertically { it } + fadeIn(),
                 exit = if (landscape) slideOutHorizontally { -it } + fadeOut() else slideOutVertically { it } + fadeOut(),
@@ -140,7 +153,7 @@ fun HudContent(
                 Modifier.align(Alignment.CenterStart).padding(start = 20.dp, top = 40.dp, bottom = 40.dp)
             } else {
                 // Sit above the bottom-left status read-out.
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp + bottomInset)
             },
             enter = if (landscape) slideInHorizontally { -it } + fadeIn() else slideInVertically { it } + fadeIn(),
             exit = if (landscape) slideOutHorizontally { -it } + fadeOut() else slideOutVertically { it } + fadeOut(),
@@ -158,6 +171,8 @@ fun HudContent(
         }
         }
 
+        state.focusMarker?.let { FocusMarkerView(it, Modifier.fillMaxSize()) }
+
         state.toast?.let {
             BasicText(
                 it,
@@ -173,13 +188,15 @@ fun HudContent(
     }
 }
 
-/** Right-edge button column: SCAN / PLANE / VOICE / TINT / AUTO / LIGHT / SNAP / VAULT. */
+/** Right-edge button column: SCAN / PLANE / VOICE / TINT / AUTO / LIGHT / FOCUS / SNAP / VAULT. */
 @Composable
 fun ControlRail(
     settings: HudSettings,
     torch: Boolean,
     planeMode: Boolean,
     onPlane: () -> Unit,
+    focusActive: Boolean,
+    onFocus: () -> Unit,
     onScan: () -> Unit,
     onVoice: () -> Unit,
     onTint: () -> Unit,
@@ -200,6 +217,7 @@ fun ControlRail(
         HudButton("TINT", active = settings.tint, onClick = onTint)
         HudButton("AUTO", active = settings.autoLock && !planeMode, onClick = onAuto)
         HudButton("LIGHT", active = torch, onClick = onLight)
+        HudButton("FOCUS", active = focusActive, onClick = onFocus)
         HudButton("SNAP", active = false, onClick = onSnap)
         HudButton("VAULT", active = false, onClick = onVault)
     }
@@ -277,5 +295,73 @@ private fun AirspaceStatus(plane: PlaneScene, modifier: Modifier = Modifier) {
         if (acc != null && acc > 20f) {
             BasicText("CALIBRATE COMPASS — WAVE THE TABLET IN A FIGURE 8", style = Hud.text(10.sp, alpha = 0.75f))
         }
+    }
+}
+
+/** A strip like the zoom one: "−  LIGHT 60%  +" with a bar you can tap or drag. Tap the title to reset. */
+@Composable
+fun HudSliderStrip(
+    title: String,
+    fraction: Float,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    onSet: (Float) -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+    minusLabel: String = "−",
+    plusLabel: String = "+",
+) {
+    val set by rememberUpdatedState(onSet)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        HudButton(minusLabel, active = true, onClick = onMinus, modifier = Modifier.width(56.dp))
+        Column(
+            Modifier
+                .width(190.dp)
+                .background(Hud.Black.copy(alpha = 0.35f))
+                .border(1.dp, Hud.blue(0.5f))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BasicText(title, style = Hud.text(13.sp, weight = FontWeight.Bold), modifier = Modifier.clickable(onClick = onReset))
+            Box(
+                Modifier
+                    .padding(top = 4.dp)
+                    .fillMaxWidth()
+                    .height(14.dp)
+                    .pointerInput(Unit) { detectTapGestures { set(it.x / size.width) } }
+                    .pointerInput(Unit) { detectHorizontalDragGestures { change, _ -> set(change.position.x / size.width) } },
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Box(Modifier.fillMaxWidth().height(3.dp).background(Hud.blue(0.25f)))
+                Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(3.dp).background(Hud.Blue))
+            }
+        }
+        HudButton(plusLabel, active = true, onClick = onPlus, modifier = Modifier.width(56.dp))
+    }
+}
+
+/** Focus reticle for a long-press: brackets that settle and read FOCUSING → AF-L (or NO FOCUS). */
+@Composable
+fun FocusMarkerView(marker: FocusMarker, modifier: Modifier = Modifier) {
+    val tm = rememberTextMeasurer()
+    Canvas(modifier) {
+        val half = 38.dp.toPx() * if (marker.status == FocusStatus.FOCUSING) 1.25f else 1f
+        val c = Offset(marker.x, marker.y)
+        val alpha = if (marker.status == FocusStatus.FAILED) 0.5f else 1f
+        val len = half * 0.45f
+        val stroke = 2.dp.toPx()
+        for ((sx, sy) in listOf(-1f to -1f, 1f to -1f, -1f to 1f, 1f to 1f)) {
+            val corner = Offset(c.x + sx * half, c.y + sy * half)
+            drawLine(Hud.blue(alpha), corner, corner + Offset(-sx * len, 0f), stroke)
+            drawLine(Hud.blue(alpha), corner, corner + Offset(0f, -sy * len), stroke)
+        }
+        drawCircle(Hud.blue(alpha), 2.5.dp.toPx(), c)
+        val label = when (marker.status) {
+            FocusStatus.FOCUSING -> "FOCUSING"
+            FocusStatus.LOCKED -> "AF-L"
+            FocusStatus.FAILED -> "NO FOCUS"
+        }
+        val m = tm.measure(label, Hud.text(10.sp, alpha = alpha, weight = FontWeight.Bold, glow = false))
+        drawText(m, topLeft = Offset(c.x - m.size.width / 2f, c.y + half + 4.dp.toPx()))
     }
 }

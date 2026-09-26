@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class HudViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -297,6 +298,90 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun setZoom(ratio: Float) = _state.update {
         if (it.zoomMax <= it.zoomMin) it else it.copy(zoomTarget = ratio.coerceIn(it.zoomMin, it.zoomMax))
+    }
+
+    // ---- torch brightness ------------------------------------------------------------------------
+
+    fun onTorchLevel(max: Int, level: Int) =
+        _state.update { it.copy(torchMaxLevel = max.coerceAtLeast(1), torchLevel = level.coerceIn(1, max.coerceAtLeast(1))) }
+
+    fun setTorchFraction(fraction: Float) {
+        val max = _state.value.torchMaxLevel
+        setTorchLevel(1 + (fraction.coerceIn(0f, 1f) * (max - 1)).roundToInt())
+    }
+
+    fun stepTorch(up: Boolean) {
+        val s = _state.value
+        val step = (s.torchMaxLevel / 10).coerceAtLeast(1)
+        setTorchLevel((s.torchLevelTarget ?: s.torchLevel) + if (up) step else -step)
+    }
+
+    private fun setTorchLevel(level: Int) {
+        val max = _state.value.torchMaxLevel
+        if (max <= 1) {
+            toast("TORCH BRIGHTNESS IS FIXED ON THIS DEVICE")
+            return
+        }
+        val l = level.coerceIn(1, max)
+        _state.update { it.copy(torchLevelTarget = l, torchLevel = l) }
+    }
+
+    // ---- focus -----------------------------------------------------------------------------------
+
+    private var focusSeq = 0
+
+    /** Long-press: focus (and expose) on that spot and hold it there. */
+    fun focusAt(point: Offset) {
+        focusSeq++
+        val id = focusSeq
+        _state.update {
+            it.copy(
+                manualFocus = null,
+                focusRequest = FocusRequest(id, point.x, point.y),
+                focusMarker = FocusMarker(id, point.x, point.y, FocusStatus.FOCUSING),
+            )
+        }
+    }
+
+    fun onFocusResult(id: Int, success: Boolean) {
+        if (id != focusSeq) return
+        _state.update { s ->
+            s.focusMarker?.takeIf { it.id == id }?.let { s.copy(focusMarker = it.copy(status = if (success) FocusStatus.LOCKED else FocusStatus.FAILED)) } ?: s
+        }
+        if (!success) viewModelScope.launch {
+            delay(1_800)
+            _state.update { s -> if (s.focusMarker?.id == id) s.copy(focusMarker = null) else s }
+        }
+    }
+
+    val manualFocusSupported: Boolean get() = (_state.value.optics.minFocusDiopters ?: 0f) > 0f
+
+    fun toggleFocusStrip() {
+        val open = !_state.value.focusStrip
+        if (open && !manualFocusSupported) toast("MANUAL FOCUS NOT AVAILABLE · LONG-PRESS TO FOCUS")
+        _state.update { it.copy(focusStrip = open && manualFocusSupported) }
+        if (open && manualFocusSupported) toast("LONG-PRESS ANYWHERE TO FOCUS & LOCK")
+    }
+
+    /** Manual focus from the strip: 0 = nearest the lens allows, 1 = infinity. */
+    fun setManualFocus(fraction: Float) {
+        if (!manualFocusSupported) return
+        _state.update { it.copy(manualFocus = fraction.coerceIn(0f, 1f), focusRequest = null, focusMarker = null) }
+    }
+
+    fun stepFocus(farther: Boolean) = setManualFocus((_state.value.manualFocus ?: 1f) + if (farther) 0.05f else -0.05f)
+
+    /** Back to continuous autofocus (releases a long-press lock and any manual distance). */
+    fun resetFocus() = _state.update {
+        it.copy(manualFocus = null, focusRequest = null, focusMarker = null, focusResetSeq = it.focusResetSeq + 1)
+    }
+
+    /** "0.35 M", "∞" or "AUTO" for the focus strip. */
+    fun focusLabel(s: HudState): String {
+        val t = s.manualFocus ?: return if (s.focusMarker?.status == FocusStatus.LOCKED) "AF-L" else "AUTO"
+        val minD = s.optics.minFocusDiopters ?: return "AUTO"
+        val d = minD * (1 - t) * (1 - t)
+        return if (d < 0.02f) "∞" else String.format(Locale.US, "%.2f M", 1 / d)
     }
 
     // ---- flashlight -------------------------------------------------------------------------------
