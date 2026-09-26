@@ -60,7 +60,7 @@ class NightVisionScreenshotTest {
             Column(Modifier.fillMaxSize().padding(bottom = 20.dp), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.CenterHorizontally) {
                 HudSliderStrip(
                     title = NightVision.label(state.nightGain, state.nightEv, state.nightMinFps, state.ambientLux),
-                    fraction = state.nightGain, onMinus = {}, onPlus = {}, onSet = {}, onReset = {}, width = 320.dp,
+                    fraction = state.nightGain, onMinus = {}, onPlus = {}, onSet = {}, onReset = {}, width = 372.dp,
                 )
             }
         }
