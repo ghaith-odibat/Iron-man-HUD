@@ -36,6 +36,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.drawText
@@ -92,8 +94,12 @@ fun HudContent(
         val lastPanel = remember { mutableStateOf<PanelUi?>(null) }
         SideEffect { if (state.panel != null) lastPanel.value = state.panel }
 
-        if (plane != null && plane.airspace.isVirtual && plane.skyView) {
-            VirtualSky(plane, Modifier.fillMaxSize(), animate = animate)
+        val virtualSky = plane != null && plane.airspace.isVirtual && plane.skyView
+        if (virtualSky) {
+            VirtualSky(plane!!, Modifier.fillMaxSize(), animate = animate)
+        } else if (state.nightVision) {
+            // Under the HUD, so the goggle vignette darkens the image but never the read-outs.
+            NightVisionOverlay(Modifier.fillMaxSize())
         }
 
         HudOverlay(
@@ -225,6 +231,8 @@ fun ControlRail(
     onLight: () -> Unit,
     onVault: () -> Unit,
     modifier: Modifier = Modifier,
+    nightVision: Boolean = false,
+    onNight: () -> Unit = {},
 ) {
     Column(
         modifier.padding(end = 22.dp),
@@ -237,9 +245,57 @@ fun ControlRail(
         HudButton("TINT", active = settings.tint, onClick = onTint)
         HudButton("AUTO", active = settings.autoLock && !planeMode, onClick = onAuto)
         HudButton("LIGHT", active = torch, onClick = onLight)
+        HudButton("NV", active = nightVision, onClick = onNight)
         HudButton("FOCUS", active = focusActive, onClick = onFocus)
         HudButton("SNAP", active = false, onClick = onSnap)
         HudButton("VAULT", active = false, onClick = onVault)
+    }
+}
+
+/** Night-vision goggle look over the camera: scan lines and a dark round vignette. Static, so cheap. */
+@Composable
+fun NightVisionOverlay(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val step = 3.dp.toPx()
+        var y = 0f
+        while (y < size.height) {
+            drawLine(Hud.Black.copy(alpha = 0.22f), Offset(0f, y), Offset(size.width, y), 1f)
+            y += step
+        }
+        drawRect(
+            Brush.radialGradient(
+                0f to Color.Transparent,
+                0.58f to Color.Transparent,
+                0.82f to Hud.Black.copy(alpha = 0.55f),
+                1f to Hud.Black.copy(alpha = 0.88f),
+                center = center,
+                radius = size.maxDimension * 0.62f,
+            ),
+        )
+    }
+}
+
+/** "◐ LOW LIGHT · 3 LX · NIGHT VISION ▸" — tap to switch night vision on, ✕ to hide until it's bright again. */
+@Composable
+fun LowLightHint(lux: Float?, onEnable: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = CutCornerShape(topStart = 8.dp, bottomEnd = 8.dp)
+    Row(
+        modifier
+            .background(Hud.Black.copy(alpha = 0.55f), shape)
+            .border(1.dp, Hud.blue(0.85f), shape),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(
+            "◐ LOW LIGHT" + (lux?.let { " · ${if (it < 10) String.format(java.util.Locale.US, "%.1f", it) else it.toInt().toString()} LX" } ?: "") +
+                " · NIGHT VISION ▸",
+            style = Hud.text(12.sp, weight = FontWeight.Bold, spacing = 1.sp),
+            modifier = Modifier.clickable(onClick = onEnable).padding(start = 14.dp, end = 8.dp, top = 9.dp, bottom = 9.dp),
+        )
+        BasicText(
+            "✕",
+            style = Hud.text(13.sp, alpha = 0.8f, weight = FontWeight.Bold),
+            modifier = Modifier.clickable(onClick = onDismiss).padding(start = 6.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+        )
     }
 }
 

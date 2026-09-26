@@ -29,8 +29,10 @@ import com.ghaith.ironhud.ai.ScanEvent
 import com.ghaith.ironhud.data.HudSettings
 import com.ghaith.ironhud.data.SecureKeyRepository
 import com.ghaith.ironhud.data.SettingsRepository
+import com.ghaith.ironhud.nightvision.NightVision
 import com.ghaith.ironhud.vision.EdgeWireframe
 import com.ghaith.ironhud.vision.ImagePrep
+import com.ghaith.ironhud.vision.NightVisionBitmaps
 import com.ghaith.ironhud.vision.OnDeviceLabeler
 import com.ghaith.ironhud.vision.TrackedObject
 import com.ghaith.ironhud.voice.Jarvis
@@ -438,6 +440,30 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleTorch() = _state.update { it.copy(torch = !it.torch) }
 
+    // ---- night vision ---------------------------------------------------------------------------------
+
+    fun toggleNightVision() = setNightVision(!_state.value.nightVision)
+
+    fun setNightVision(on: Boolean) {
+        _state.update { if (on) it.copy(nightVision = true) else it.copy(nightVision = false, nightEv = null, nightMinFps = null) }
+        toast(if (on) "NIGHT VISION ON" else "NIGHT VISION OFF")
+    }
+
+    fun setNightGain(fraction: Float) = _state.update { it.copy(nightGain = fraction.coerceIn(0f, 1f)) }
+
+    fun stepNightGain(up: Boolean) = setNightGain(_state.value.nightGain + if (up) NightVision.STEP else -NightVision.STEP)
+
+    /** The camera reports the exposure compensation and frame-rate floor it accepted. */
+    fun onNightCamera(ev: Float?, minFps: Int?) = _state.update { it.copy(nightEv = ev, nightMinFps = minFps) }
+
+    /** Light sensor: suggest night vision when it gets dark; a dismissed hint comes back after it's been bright. */
+    fun onAmbientLux(lux: Float) = _state.update {
+        val dark = NightVision.isDark(it.lowLight, lux.toDouble())
+        it.copy(ambientLux = lux, lowLight = dark, lowLightDismissed = dark && it.lowLightDismissed)
+    }
+
+    fun dismissLowLightHint() = _state.update { it.copy(lowLightDismissed = true) }
+
     /** The camera reports what the torch is really doing (it switches off when the app is backgrounded). */
     fun onTorchState(on: Boolean) = _state.update { if (it.torch == on) it else it.copy(torch = on) }
 
@@ -484,7 +510,10 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
 
         scanJob = viewModelScope.launch {
             try {
-                val prepared = withContext(Dispatchers.Default) { ImagePrep.prepare(frame, box, viewW, viewH) }
+                val nightGain = _state.value.takeIf { it.nightVision }?.let { NightVision.gain(it.nightGain) }
+                val prepared = withContext(Dispatchers.Default) {
+                    ImagePrep.prepare(frame, box, viewW, viewH, enhance = nightGain?.let { g -> { crop: Bitmap -> NightVisionBitmaps.brighten(crop, g) } })
+                }
                 var quickName: String? = category
                 updatePanel { it.copy(status = "ANALYZING", prelim = category?.uppercase(Locale.US)) }
 

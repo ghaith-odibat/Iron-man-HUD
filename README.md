@@ -34,6 +34,25 @@ Everything is drawn in a single colour, light tech blue (`#66D9FF`).
 * **HUD chrome:** compass tape from the rotation sensor, artificial horizon, clock, battery,
   uplink status and a scan sweep.
 
+## Night Vision 🌙
+
+Tap **NV** to see in the dark:
+
+* **Two stages of amplification:**
+  * The camera exposes longer (the lowest AE frame-rate range it supports) at maximum exposure
+    compensation.
+  * An intensifier curve then lifts shadows hard and rolls highlights off instead of clipping.
+* **The look:** the image stays in HUD blue, with live grain on Android 13+, faint scan lines and a
+  round goggle vignette. The HUD read-outs stay sharp on top.
+* **Gain strip:** sets amplification from 1× to 16× in half-stop steps. It shows what the camera
+  allowed, e.g. `NV ×4.0 · EV +2.0 · ≥7 FPS · 1.5 LX`.
+* **Low-light hint:** when the light sensor reads dark, a `◐ LOW LIGHT · NIGHT VISION ▸` chip offers
+  to switch it on. ✕ hides it until the room has been bright again.
+* **Scans and SNAPs:** objects you scan in NV mode are sent to the AI brightened, still in colour, so
+  it can identify them. SNAP saves the night-vision image as you see it.
+* **Limits:** a phone camera has no infrared, so a pitch-black room stays black; it needs some light
+  (moon, street lights, a screen). Longer exposures blur fast motion.
+
 ## Plane Mode ✈
 
 Tap **PLANE** to see live aircraft through the camera:
@@ -107,6 +126,7 @@ key.
 | **SCAN** | Identify what is under the reticle now |
 | **RESCAN** / **✕** on the card | Query again / close the card |
 | **VOICE**, **TINT**, **AUTO** | Toggle voice read-out, hologram tint, auto-lock |
+| **NV** | Night vision: longer exposures, 1–16× amplification, HUD-blue intensifier look, gain strip |
 | **LIGHT** | Turn the device flashlight (camera torch) on/off; while on, a LIGHT strip sets its brightness (on supported hardware) |
 | **Long-press** anywhere | Focus and lock focus/exposure on that spot (AF-L) |
 | **FOCUS** | Manual focus strip: NEAR ↔ FAR with the distance shown; tap the FOCUS readout to go back to autofocus |

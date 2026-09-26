@@ -18,8 +18,9 @@ object ImagePrep {
     /**
      * Crops [box] (in view pixels of a view sized [viewW]x[viewH]) out of [frame] with some context
      * padding, and downsizes it: a ~40 KB JPEG uploads in a fraction of the time of a full frame.
+     * [enhance], when given, transforms the crop first (night-vision brightening).
      */
-    fun prepare(frame: Bitmap, box: Rect, viewW: Int, viewH: Int): PreparedTarget {
+    fun prepare(frame: Bitmap, box: Rect, viewW: Int, viewH: Int, enhance: ((Bitmap) -> Bitmap)? = null): PreparedTarget {
         val sx = frame.width / viewW.coerceAtLeast(1).toFloat()
         val sy = frame.height / viewH.coerceAtLeast(1).toFloat()
         val padX = box.width * PADDING
@@ -45,7 +46,9 @@ object ImagePrep {
         right = right.coerceIn(left + 1, frame.width)
         bottom = bottom.coerceIn(top + 1, frame.height)
 
-        val crop = Bitmap.createBitmap(frame, left, top, right - left, bottom - top)
+        val raw = Bitmap.createBitmap(frame, left, top, right - left, bottom - top)
+        // Night vision brightens just the crop (fast) so the AI and labeler can see in the dark.
+        val crop = enhance?.invoke(raw) ?: raw
         val upload = scaleToMax(crop, UPLOAD_MAX_SIDE)
         val jpeg = ByteArrayOutputStream(64 * 1024).use { out ->
             upload.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)

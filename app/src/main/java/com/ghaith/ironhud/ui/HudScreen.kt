@@ -40,11 +40,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ghaith.ironhud.FocusStatus
 import com.ghaith.ironhud.HudViewModel
 import com.ghaith.ironhud.capture.HudCapture
+import com.ghaith.ironhud.nightvision.NightVision
 import com.ghaith.ironhud.ui.camera.CameraLayer
 import com.ghaith.ironhud.ui.hud.ControlRail
 import com.ghaith.ironhud.ui.hud.HudContent
 import com.ghaith.ironhud.ui.hud.HudSliderStrip
+import com.ghaith.ironhud.ui.hud.LowLightHint
 import com.ghaith.ironhud.ui.hud.ZoomControl
+import com.ghaith.ironhud.ui.hud.rememberAmbientLux
 import com.ghaith.ironhud.ui.hud.rememberBatteryPercent
 import com.ghaith.ironhud.ui.hud.rememberClock
 import com.ghaith.ironhud.ui.hud.rememberSensorHub
@@ -68,6 +71,8 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
     LaunchedEffect(airspace.declinationDeg) { sensors.declinationDeg = airspace.declinationDeg }
     val clock by rememberClock()
     val battery by rememberBatteryPercent()
+    val lux by rememberAmbientLux()
+    LaunchedEffect(lux) { lux?.let(vm::onAmbientLux) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val overlayLayer = rememberGraphicsLayer()
@@ -93,8 +98,9 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
         scope.launch {
             val overlay = overlayLayer.toImageBitmap().asAndroidBitmap()
             val camera = previewView.value?.bitmap
+            val nightGain = state.takeIf { it.nightVision }?.let { NightVision.gain(it.nightGain) }
             val saved = withContext(Dispatchers.IO) {
-                HudCapture.save(context, HudCapture.compose(camera, overlay, settings.tint))
+                HudCapture.save(context, HudCapture.compose(camera, overlay, settings.tint, nightGain))
             }
             vm.toast(if (saved) "CAPTURE SAVED · PICTURES/IRONHUD" else "CAPTURE FAILED")
         }
@@ -137,7 +143,10 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
 
     val showFocusStrip = state.focusStrip
     val showLightStrip = state.torch && state.torchMaxLevel > 1
-    val extraStrips = 58.dp * ((if (showFocusStrip) 1 else 0) + (if (showLightStrip) 1 else 0))
+    val showNightStrip = state.nightVision
+    val showLowLightHint = state.lowLight && !state.nightVision && !state.lowLightDismissed
+    val extraStrips = 58.dp * ((if (showFocusStrip) 1 else 0) + (if (showLightStrip) 1 else 0) + (if (showNightStrip) 1 else 0)) +
+        (if (showLowLightHint) 44.dp else 0.dp)
 
     Box(
         Modifier
@@ -159,6 +168,9 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             onFocusResult = vm::onFocusResult,
             manualFocus = state.manualFocus,
             focusResetSeq = state.focusResetSeq,
+            nightVision = state.nightVision,
+            nightGain = state.nightGain,
+            onNightCamera = vm::onNightCamera,
             onPreviewView = { view ->
                 previewView.value = view
                 vm.frameSource = view?.let { v -> { v.bitmap } }
@@ -215,6 +227,19 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            if (showLowLightHint) {
+                LowLightHint(state.ambientLux, onEnable = { vm.setNightVision(true) }, onDismiss = vm::dismissLowLightHint)
+            }
+            if (showNightStrip) {
+                HudSliderStrip(
+                    title = NightVision.label(state.nightGain, state.nightEv, state.nightMinFps, state.ambientLux),
+                    fraction = state.nightGain,
+                    onMinus = { vm.stepNightGain(up = false) },
+                    onPlus = { vm.stepNightGain(up = true) },
+                    onSet = vm::setNightGain,
+                    onReset = { vm.setNightGain(NightVision.DEFAULT_FRACTION) },
+                )
+            }
             if (showFocusStrip) {
                 HudSliderStrip(
                     title = "FOCUS ${vm.focusLabel(state)}",
@@ -262,6 +287,8 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             onSnap = snap,
             onLight = vm::toggleTorch,
             onVault = onOpenVault,
+            nightVision = state.nightVision,
+            onNight = vm::toggleNightVision,
             modifier = Modifier.align(Alignment.CenterEnd),
         )
 

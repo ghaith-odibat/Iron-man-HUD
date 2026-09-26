@@ -95,6 +95,34 @@ internal fun displayRotation(context: Context): Int =
         (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation
     }
 
+/** Ambient light in lux from the light sensor (about once a second), or null when there isn't one. */
+@Composable
+fun rememberAmbientLux(): State<Float?> {
+    val context = LocalContext.current
+    val state = remember { mutableStateOf<Float?>(null) }
+    DisposableEffect(context) {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val sensor = sm.getDefaultSensor(Sensor.TYPE_LIGHT)
+        var last = 0L
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                val now = event.timestamp / 1_000_000
+                if (state.value == null || now - last >= LUX_INTERVAL_MS) {
+                    last = now
+                    state.value = event.values[0]
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        if (sensor != null) sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        onDispose { sm.unregisterListener(listener) }
+    }
+    return state
+}
+
+private const val LUX_INTERVAL_MS = 1_000L
+
 @Composable
 fun rememberBatteryPercent(): State<Int?> {
     val context = LocalContext.current

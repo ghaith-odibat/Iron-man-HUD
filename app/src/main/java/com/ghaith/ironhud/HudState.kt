@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import com.ghaith.ironhud.ai.Brief
 import com.ghaith.ironhud.ai.ProviderId
+import com.ghaith.ironhud.nightvision.NightVision
 import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.vision.TrackedObject
 
@@ -84,5 +85,16 @@ data class HudState(
     val pickerBusy: Boolean = false,
     /** Holo hangar open on this aircraft type (ICAO designator), or closed when null. */
     val hangar: String? = null,
+    /** Night vision: long camera exposures plus the HUD-blue intensifier look. */
+    val nightVision: Boolean = false,
+    /** Night-vision gain slider, 0..1 (1× … 16×, see [NightVision.gain]). */
+    val nightGain: Float = NightVision.DEFAULT_FRACTION,
+    /** What the camera allowed in night vision: exposure compensation (EV) and its lowest frame rate. */
+    val nightEv: Float? = null,
+    val nightMinFps: Int? = null,
+    /** Light-sensor reading, whether it's dark enough to suggest night vision, and whether that hint was dismissed. */
+    val ambientLux: Float? = null,
+    val lowLight: Boolean = false,
+    val lowLightDismissed: Boolean = false,
     val toast: String? = null,
 )

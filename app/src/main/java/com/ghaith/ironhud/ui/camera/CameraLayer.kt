@@ -1,10 +1,9 @@
 package com.ghaith.ironhud.ui.camera
 
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
-import android.view.View
+import android.os.Build
+import android.util.Range
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -29,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -36,8 +36,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ghaith.ironhud.FocusRequest
+import com.ghaith.ironhud.nightvision.NightVision
 import com.ghaith.ironhud.plane.CameraOptics
-import com.ghaith.ironhud.ui.theme.Hud
 import com.ghaith.ironhud.vision.TrackedObject
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
@@ -63,6 +63,12 @@ fun CameraLayer(
     onFocusResult: (id: Int, success: Boolean) -> Unit,
     manualFocus: Float?,
     focusResetSeq: Int,
+    /** Night vision: longest exposures and maximum exposure compensation, plus the intensifier look. */
+    nightVision: Boolean,
+    /** Night-vision gain slider position (0..1, see [NightVision.gain]). */
+    nightGain: Float,
+    /** What the camera allowed for night vision: exposure compensation (EV) and the lowest frame rate. */
+    onNightCamera: (ev: Float?, minFps: Int?) -> Unit,
     onPreviewView: (PreviewView?) -> Unit,
     onObjects: (List<TrackedObject>) -> Unit,
     modifier: Modifier = Modifier,
@@ -72,6 +78,9 @@ fun CameraLayer(
     val latestOnObjects = rememberUpdatedState(onObjects)
     val previewRef = remember { mutableStateOf<PreviewView?>(null) }
     var minFocusDiopters by remember { mutableStateOf<Float?>(null) }
+    var fpsRanges by remember { mutableStateOf<List<Range<Int>>>(emptyList()) }
+    var cameraReady by remember { mutableStateOf(false) }
+    val nightShader = remember { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) NightShader.create() else null }
 
     val detector = remember {
         ObjectDetection.getClient(
@@ -127,6 +136,8 @@ fun CameraLayer(
         if (info != null) {
             val optics = readOptics(info)
             minFocusDiopters = optics.minFocusDiopters
+            fpsRanges = readFpsRanges(info)
+            cameraReady = true
             onOptics(optics)
             // Torch brightness (CameraX 1.5; needs hardware support, typically Android 15+).
             val max = runCatching { info.maxTorchStrengthLevel }.getOrDefault(1).coerceAtLeast(1)
@@ -169,10 +180,39 @@ fun CameraLayer(
         if (focusResetSeq > 0) runCatching { cameraController.cameraControl?.cancelFocusAndMetering() }
     }
 
-    // Manual focus distance via Camera2 (AF off + LENS_FOCUS_DISTANCE); null returns to autofocus.
-    LaunchedEffect(manualFocus, minFocusDiopters) {
+    // Camera2 request options: manual focus (AF off + LENS_FOCUS_DISTANCE) and, in night vision, the
+    // AE frame-rate range that allows the longest exposures. One builder so neither wipes the other.
+    LaunchedEffect(manualFocus, minFocusDiopters, nightVision, fpsRanges) {
         val control = cameraController.cameraControl ?: return@LaunchedEffect
-        runCatching { applyManualFocus(control, manualFocus, minFocusDiopters) }
+        runCatching { applyCaptureOptions(control, manualFocus, minFocusDiopters, if (nightVision) nightRange(fpsRanges) else null) }
+    }
+
+    // Night vision pushes exposure compensation to the camera's maximum, and back to 0 after.
+    LaunchedEffect(nightVision, cameraReady) {
+        val info = cameraController.cameraInfo ?: return@LaunchedEffect
+        val control = cameraController.cameraControl ?: return@LaunchedEffect
+        val exposure = info.exposureState
+        val supported = exposure.isExposureCompensationSupported
+        val index = if (nightVision && supported) exposure.exposureCompensationRange.upper else 0
+        if (supported) runCatching { control.setExposureCompensationIndex(index) }
+        onNightCamera(
+            if (nightVision && supported) index * exposure.exposureCompensationStep.toFloat() else null,
+            if (nightVision) nightRange(fpsRanges)?.lower else null,
+        )
+    }
+
+    // Live intensifier grain (Android 13+): re-set the shader effect about 30 times a second.
+    LaunchedEffect(nightVision, nightGain, nightShader) {
+        if (!nightVision || nightShader == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        val gain = NightVision.gain(nightGain)
+        var last = 0L
+        while (true) withFrameNanos { t ->
+            val view = previewRef.value
+            if (view != null && t - last >= GRAIN_FRAME_NS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                last = t
+                nightShader.apply(view, gain, t / 1e9)
+            }
+        }
     }
 
     // Flashlight: wait for the camera to be bound, then check it actually has a flash unit.
@@ -214,7 +254,7 @@ fun CameraLayer(
                 onPreviewView(this)
             }
         },
-        update = { view -> applyTint(view, tint) },
+        update = { view -> NightVisionLook.apply(view, tint, nightVision, NightVision.gain(nightGain), shaderActive = nightShader != null) },
     )
 }
 
@@ -228,29 +268,31 @@ private fun readOptics(info: CameraInfo): CameraOptics = runCatching {
 }.getOrDefault(CameraOptics())
 
 @OptIn(ExperimentalCamera2Interop::class)
-private fun applyManualFocus(control: CameraControl, fraction: Float?, minDiopters: Float?) {
+private fun readFpsRanges(info: CameraInfo): List<Range<Int>> = runCatching {
+    Camera2CameraInfo.from(info).getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.toList()
+}.getOrNull().orEmpty()
+
+private fun nightRange(ranges: List<Range<Int>>): Range<Int>? =
+    NightVision.pickFpsRange(ranges.map { it.lower to it.upper })?.let { (lo, hi) -> Range(lo, hi) }
+
+@OptIn(ExperimentalCamera2Interop::class)
+private fun applyCaptureOptions(control: CameraControl, focus: Float?, minDiopters: Float?, nightFps: Range<Int>?) {
     val c2 = Camera2CameraControl.from(control)
-    if (fraction == null || minDiopters == null || minDiopters <= 0f) {
+    val manual = focus != null && minDiopters != null && minDiopters > 0f
+    if (!manual && nightFps == null) {
         c2.clearCaptureRequestOptions()
         return
     }
-    control.cancelFocusAndMetering()
-    // Square curve: finer steps at the far end, where most things are.
-    val diopters = minDiopters * (1 - fraction) * (1 - fraction)
-    c2.setCaptureRequestOptions(
-        CaptureRequestOptions.Builder()
-            .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            .setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, diopters)
-            .build()
-    )
+    val options = CaptureRequestOptions.Builder()
+    if (focus != null && minDiopters != null && minDiopters > 0f) {
+        control.cancelFocusAndMetering()
+        // Square curve: finer steps at the far end, where most things are.
+        val diopters = minDiopters * (1 - focus) * (1 - focus)
+        options.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+        options.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, diopters)
+    }
+    if (nightFps != null) options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, nightFps)
+    c2.setCaptureRequestOptions(options.build())
 }
 
-private fun applyTint(view: View, tint: Boolean) {
-    if (tint) {
-        view.setLayerType(View.LAYER_TYPE_HARDWARE, Paint().apply {
-            colorFilter = ColorMatrixColorFilter(Hud.TINT_MATRIX)
-        })
-    } else {
-        view.setLayerType(View.LAYER_TYPE_NONE, null)
-    }
-}
+private const val GRAIN_FRAME_NS = 33_000_000L

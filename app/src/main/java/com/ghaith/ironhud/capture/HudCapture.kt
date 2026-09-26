@@ -10,6 +10,7 @@ import android.graphics.Rect
 import android.os.Build
 import android.provider.MediaStore
 import com.ghaith.ironhud.ui.theme.Hud
+import com.ghaith.ironhud.vision.NightVisionBitmaps
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -17,15 +18,17 @@ import java.util.Locale
 /** Composites the camera frame and the HUD overlay into one JPEG in Pictures/IronHUD. */
 object HudCapture {
 
-    fun compose(camera: Bitmap?, overlay: Bitmap, tint: Boolean): Bitmap {
+    /** [nightGain] non-null: the camera frame gets the night-vision intensifier look instead of the tint. */
+    fun compose(camera: Bitmap?, overlay: Bitmap, tint: Boolean, nightGain: Double? = null): Bitmap {
         val out = Bitmap.createBitmap(overlay.width, overlay.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawColor(android.graphics.Color.BLACK)
         if (camera != null) {
+            val frame = if (nightGain != null) NightVisionBitmaps.toHud(camera, nightGain, seed = camera.generationId) else camera
             val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-                if (tint) colorFilter = ColorMatrixColorFilter(Hud.TINT_MATRIX)
+                if (tint && nightGain == null) colorFilter = ColorMatrixColorFilter(Hud.TINT_MATRIX)
             }
-            canvas.drawBitmap(camera, null, Rect(0, 0, out.width, out.height), paint)
+            canvas.drawBitmap(frame, null, Rect(0, 0, out.width, out.height), paint)
         }
         // Compose layers can hand back HARDWARE bitmaps, which a software canvas can't draw.
         val soft = if (overlay.config == Bitmap.Config.HARDWARE) overlay.copy(Bitmap.Config.ARGB_8888, false) else overlay
