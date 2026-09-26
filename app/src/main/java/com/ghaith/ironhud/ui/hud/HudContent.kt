@@ -55,10 +55,9 @@ fun HudContent(
         val landscape = maxWidth > maxHeight
         val panelWidth = if (landscape) min(maxWidth * 0.40f, 470.dp) else maxWidth - 32.dp
         val density = LocalDensity.current
-        // Where the leader line meets the card.
-        val anchor = if (state.panel == null) null else with(density) {
-            if (landscape) Offset((20.dp + panelWidth).toPx(), (maxHeight * 0.42f).toPx())
-            else Offset((maxWidth / 2).toPx(), (maxHeight * 0.52f).toPx())
+        // Where the leader line meets the card (landscape only; in portrait the card sits below).
+        val anchor = if (state.panel == null || !landscape) null else with(density) {
+            Offset((20.dp + panelWidth).toPx(), (maxHeight * 0.42f).toPx())
         }
 
         val lastPanel = remember { mutableStateOf<PanelUi?>(null) }
@@ -91,7 +90,8 @@ fun HudContent(
             modifier = if (landscape) {
                 Modifier.align(Alignment.CenterStart).padding(start = 20.dp, top = 40.dp, bottom = 40.dp)
             } else {
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp)
+                // Sit above the bottom-left status read-out.
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)
             },
             enter = if (landscape) slideInHorizontally { -it } + fadeIn() else slideInVertically { it } + fadeIn(),
             exit = if (landscape) slideOutHorizontally { -it } + fadeOut() else slideOutVertically { it } + fadeOut(),
