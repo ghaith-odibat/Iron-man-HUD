@@ -6,8 +6,8 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** What a lock sends up the pipeline: the crop, its upload JPEG and the hologram wireframe. */
-class PreparedTarget(val crop: Bitmap, val jpeg: ByteArray, val wireframe: Bitmap)
+/** What a lock sends up the pipeline: the crop and its (small) upload JPEG. */
+class PreparedTarget(val crop: Bitmap, val jpeg: ByteArray)
 
 object ImagePrep {
     private const val PADDING = 0.15f
@@ -51,9 +51,8 @@ object ImagePrep {
             upload.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
             out.toByteArray()
         }
-        val wire = EdgeWireframe.render(upload)
         if (upload !== crop) upload.recycle()
-        return PreparedTarget(crop, jpeg, wire)
+        return PreparedTarget(crop, jpeg)
     }
 
     fun scaleToMax(src: Bitmap, maxSide: Int): Bitmap {

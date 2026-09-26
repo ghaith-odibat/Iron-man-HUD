@@ -20,6 +20,7 @@ import com.ghaith.ironhud.ai.ScanEvent
 import com.ghaith.ironhud.data.HudSettings
 import com.ghaith.ironhud.data.SecureKeyRepository
 import com.ghaith.ironhud.data.SettingsRepository
+import com.ghaith.ironhud.vision.EdgeWireframe
 import com.ghaith.ironhud.vision.ImagePrep
 import com.ghaith.ironhud.vision.OnDeviceLabeler
 import com.ghaith.ironhud.vision.TrackedObject
@@ -67,6 +68,8 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     private var scanJob: Job? = null
     private var keepAliveJob: Job? = null
     private var dwellId: Int? = null
+    /** A target the user just dismissed: don't auto-lock it again until it leaves the reticle. */
+    private var suppressedId: Int? = null
     private var dwellStart = 0L
     private var lastAutoScan = 0L
     private val cache = object : LinkedHashMap<Int, PanelUi>(32, 0.75f, true) {
@@ -134,7 +137,8 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         if (settings.value.autoLock && viewW > 0) {
             val center = Offset(viewW / 2f, viewH / 2f)
             val candidate = objects.filter { it.id != null && it.box.contains(center) }.minByOrNull { it.area }
-            if (candidate == null || candidate.id == lock?.targetId) {
+            if (candidate?.id != suppressedId) suppressedId = null
+            if (candidate == null || candidate.id == lock?.targetId || candidate.id == suppressedId) {
                 dwellId = null
             } else {
                 if (candidate.id != dwellId) {
@@ -175,6 +179,8 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismiss() {
+        suppressedId = _state.value.lock?.targetId
+        dwellId = null
         scanJob?.cancel()
         jarvis.stop()
         _state.update { it.copy(lock = null, panel = null) }
@@ -211,15 +217,22 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         scanJob = viewModelScope.launch {
             try {
                 val prepared = withContext(Dispatchers.Default) { ImagePrep.prepare(frame, box, viewW, viewH) }
-                updatePanel { it.copy(wireframe = prepared.wireframe.asImageBitmap(), status = "ANALYZING") }
+                var quickName: String? = category
+                updatePanel { it.copy(status = "ANALYZING", prelim = category?.uppercase(Locale.US)) }
 
-                val quick = labeler.label(prepared.crop)
-                val prelim = quick?.let { "${it.text.uppercase(Locale.US)} · ${(it.confidence * 100).toInt()}%" }
-                    ?: category?.uppercase(Locale.US)
-                updatePanel { it.copy(prelim = prelim) }
-
-                identifier.identify(prepared.jpeg, quick?.text ?: category).collect { event ->
-                    handle(event, targetId, quick?.text ?: category)
+                // The upload starts right away; the offline guess and the wireframe fill in alongside it.
+                launch {
+                    val wire = withContext(Dispatchers.Default) { EdgeWireframe.render(prepared.crop) }
+                    updatePanel { it.copy(wireframe = wire.asImageBitmap()) }
+                }
+                launch {
+                    labeler.label(prepared.crop)?.let { q ->
+                        quickName = q.text
+                        updatePanel { it.copy(prelim = "${q.text.uppercase(Locale.US)} · ${(q.confidence * 100).toInt()}%") }
+                    }
+                }
+                identifier.identify(prepared.jpeg, category).collect { event ->
+                    handle(event, targetId, quickName)
                 }
             } catch (e: CancellationException) {
                 throw e
