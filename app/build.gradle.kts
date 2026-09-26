@@ -20,9 +20,19 @@ android {
         targetSdk = 36
         versionCode = ciVersionCode
         versionName = "0.1.$ciVersionCode"
-        ndk {
-            // Samsung tablets are ARM; dropping x86 keeps the ML Kit native libs small.
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+    }
+
+    // Samsung tablets are ARM, so x86 is dropped. "universal" also runs on older 32-bit tablets;
+    // "arm64" is ~7 MB smaller for any 64-bit tablet. Same app id and signature: either upgrades the other.
+    flavorDimensions += "abi"
+    productFlavors {
+        create("universal") {
+            dimension = "abi"
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        }
+        create("arm64") {
+            dimension = "abi"
+            ndk { abiFilters += listOf("arm64-v8a") }
         }
     }
 

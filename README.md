@@ -29,7 +29,11 @@ Everything is drawn in a single colour, light tech blue (`#66D9FF`).
 
 ## Install on your tablet
 
-1. On the tablet, open **Releases → latest** in this repo and download `IronHUD.apk`.
+1. On the tablet, open **Releases → latest** in this repo and download one of these:
+   * `IronHUD-arm64.apk` (~24 MB) for any 64-bit tablet, which covers every Galaxy Tab S
+     and Tab A from recent years.
+   * `IronHUD.apk` (~31 MB, universal) if the arm64 one won't install, e.g. an older 32-bit
+     tablet.
 2. Open the file. If Android asks, allow *Install unknown apps* for your browser or *My Files*.
 3. Launch **Iron HUD** and allow camera access.
 4. Tap **VAULT** and add at least one free key. See **[docs/GET_FREE_KEYS.md](docs/GET_FREE_KEYS.md)**.
@@ -74,8 +78,8 @@ CI (`.github/workflows/build-apk.yml`) runs the unit tests and builds the releas
 then publishes it as a GitHub Release. To build locally with JDK 17+ and the Android SDK:
 
 ```
-./gradlew testDebugUnitTest assembleRelease
-# → app/build/outputs/apk/release/app-release.apk
+./gradlew testUniversalDebugUnitTest assembleRelease
+# → app/build/outputs/apk/{universal,arm64}/release/*.apk
 ```
 
 `keystore/ironhud-sideload.jks` is a **non-secret** signing key committed on purpose, so sideloaded

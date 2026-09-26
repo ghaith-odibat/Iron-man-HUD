@@ -26,7 +26,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests
-        run: ./gradlew --stacktrace testDebugUnitTest -PversionCode=${{ github.run_number }}
+        run: ./gradlew --stacktrace testUniversalDebugUnitTest -PversionCode=${{ github.run_number }}
 
       - name: Build release APK
         run: ./gradlew --stacktrace assembleRelease -PversionCode=${{ github.run_number }}
@@ -34,7 +34,8 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk out/IronHUD.apk
+          cp app/build/outputs/apk/universal/release/app-universal-release.apk out/IronHUD.apk
+          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk out/IronHUD-arm64.apk
           ls -la out
 
       - name: Upload HUD screenshots
@@ -49,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: IronHUD-apk
-          path: out/IronHUD.apk
+          path: out/*.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -60,11 +61,13 @@ jobs:
           make_latest: true
           files: |
             out/IronHUD.apk
+            out/IronHUD-arm64.apk
             app/build/hud-screenshots/*.png
           body: |
             Built from `${{ github.ref_name }}` @ ${{ github.sha }}.
 
-            **Install on your tablet:** download `IronHUD.apk` below, open it, and allow
+            **Install on your tablet:** download `IronHUD-arm64.apk` (any 64-bit tablet, smaller) or
+            `IronHUD.apk` (universal, also older 32-bit tablets) below, open it, and allow
             "Install unknown apps" for your browser/Files app when asked.
             Then tap VAULT and paste your free API keys — see
             [docs/GET_FREE_KEYS.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/GET_FREE_KEYS.md).
