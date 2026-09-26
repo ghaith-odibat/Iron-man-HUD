@@ -6,6 +6,7 @@ import android.view.View
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.TorchState
+import androidx.camera.core.ZoomState
 import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
@@ -38,6 +39,8 @@ fun CameraLayer(
     torch: Boolean,
     onTorchState: (Boolean) -> Unit,
     onTorchUnavailable: () -> Unit,
+    zoomTarget: Float?,
+    onZoomState: (ratio: Float, min: Float, max: Float) -> Unit,
     onPreviewView: (PreviewView?) -> Unit,
     onObjects: (List<TrackedObject>) -> Unit,
     modifier: Modifier = Modifier,
@@ -75,10 +78,17 @@ fun CameraLayer(
         cameraController.bindToLifecycle(lifecycleOwner)
         val torchObserver = Observer<Int> { onTorchState(it == TorchState.ON) }
         cameraController.torchState.observe(lifecycleOwner, torchObserver)
+        val zoomObserver = Observer<ZoomState> { onZoomState(it.zoomRatio, it.minZoomRatio, it.maxZoomRatio) }
+        cameraController.zoomState.observe(lifecycleOwner, zoomObserver)
         onDispose {
             cameraController.torchState.removeObserver(torchObserver)
+            cameraController.zoomState.removeObserver(zoomObserver)
             cameraController.unbind()
         }
+    }
+
+    LaunchedEffect(zoomTarget) {
+        if (zoomTarget != null && cameraController.cameraInfo != null) cameraController.setZoomRatio(zoomTarget)
     }
 
     // Flashlight: wait for the camera to be bound, then check it actually has a flash unit.

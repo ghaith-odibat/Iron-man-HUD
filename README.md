@@ -23,6 +23,8 @@ Everything is drawn in a single colour, light tech blue (`#66D9FF`).
   straight away.
 * **J.A.R.V.I.S. voice:** briefs can be read aloud with the tablet's built-in TTS, free and offline.
 * **Hologram tint:** renders the camera feed itself in HUD blue.
+* **Zoom:** pinch anywhere, or use the − / + strip at the bottom, to zoom up to the camera's maximum.
+  Tap the readout to jump back to 1×.
 * **LIGHT:** switches the tablet's flashlight on or off for scanning in the dark.
 * **SNAP:** saves the camera frame plus the HUD overlay to `Pictures/IronHUD`.
 * **HUD chrome:** compass tape from the rotation sensor, artificial horizon, clock, battery,
@@ -52,6 +54,7 @@ key.
 | **RESCAN** / **✕** on the card | Query again / close the card |
 | **VOICE**, **TINT**, **AUTO** | Toggle voice read-out, hologram tint, auto-lock |
 | **LIGHT** | Turn the device flashlight (camera torch) on/off |
+| Pinch with two fingers / **−** **+** | Zoom out / in (tap the ZOOM readout to go back to 1×) |
 | **SNAP** | Save a screenshot with the HUD |
 | **VAULT** | Manage API keys, provider order, models |
 

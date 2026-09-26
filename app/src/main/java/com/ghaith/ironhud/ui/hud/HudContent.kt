@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -149,6 +152,42 @@ fun ControlRail(
         HudButton("LIGHT", active = torch, onClick = onLight)
         HudButton("SNAP", active = false, onClick = onSnap)
         HudButton("VAULT", active = false, onClick = onVault)
+    }
+}
+
+/** Bottom-centre "−  2.4×  +" zoom strip with a bar showing where in the camera's range we are. Tap the readout for 1×. */
+@Composable
+fun ZoomControl(
+    zoom: Float,
+    min: Float,
+    max: Float,
+    onZoomOut: () -> Unit,
+    onZoomIn: () -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val canZoom = max > min
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        HudButton("−", active = canZoom && zoom > min + 0.01f, onClick = onZoomOut, modifier = Modifier.width(56.dp))
+        Column(
+            Modifier
+                .width(110.dp)
+                .background(Hud.Black.copy(alpha = 0.35f))
+                .border(1.dp, Hud.blue(0.5f))
+                .clickable(onClick = onReset)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BasicText(
+                "ZOOM " + String.format(java.util.Locale.US, "%.1f×", zoom),
+                style = Hud.text(13.sp, weight = FontWeight.Bold),
+            )
+            val fraction = if (canZoom) ((zoom - min) / (max - min)).coerceIn(0f, 1f) else 0f
+            Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(Hud.blue(0.25f))) {
+                Box(Modifier.fillMaxWidth(fraction).height(3.dp).background(Hud.Blue))
+            }
+        }
+        HudButton("+", active = canZoom && zoom < max - 0.01f, onClick = onZoomIn, modifier = Modifier.width(56.dp))
     }
 }
 

@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -35,6 +38,7 @@ import com.ghaith.ironhud.capture.HudCapture
 import com.ghaith.ironhud.ui.camera.CameraLayer
 import com.ghaith.ironhud.ui.hud.ControlRail
 import com.ghaith.ironhud.ui.hud.HudContent
+import com.ghaith.ironhud.ui.hud.ZoomControl
 import com.ghaith.ironhud.ui.hud.rememberAttitude
 import com.ghaith.ironhud.ui.hud.rememberBatteryPercent
 import com.ghaith.ironhud.ui.hud.rememberClock
@@ -103,6 +107,8 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             torch = state.torch,
             onTorchState = vm::onTorchState,
             onTorchUnavailable = vm::onTorchUnavailable,
+            zoomTarget = state.zoomTarget,
+            onZoomState = vm::onZoomState,
             onPreviewView = { view ->
                 previewView.value = view
                 vm.frameSource = view?.let { v -> { v.bitmap } }
@@ -119,7 +125,11 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                     overlayLayer.record { this@drawWithContent.drawContent() }
                     drawLayer(overlayLayer)
                 }
-                .pointerInput(Unit) { detectTapGestures(onTap = vm::onTap) },
+                .pointerInput(Unit) { detectTapGestures(onTap = vm::onTap) }
+                // Two-finger pinch zooms the camera.
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, zoom, _ -> if (zoom != 1f) vm.zoomBy(zoom) }
+                },
         ) {
             HudContent(
                 state = state,
@@ -131,6 +141,16 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                 onRescan = vm::rescan,
             )
         }
+
+        ZoomControl(
+            zoom = state.zoom,
+            min = state.zoomMin,
+            max = state.zoomMax,
+            onZoomOut = { vm.zoomStep(zoomIn = false) },
+            onZoomIn = { vm.zoomStep(zoomIn = true) },
+            onReset = vm::resetZoom,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp),
+        )
 
         ControlRail(
             settings = settings,

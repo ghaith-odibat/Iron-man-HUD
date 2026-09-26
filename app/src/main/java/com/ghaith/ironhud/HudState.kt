@@ -49,5 +49,11 @@ data class HudState(
     val uplink: Uplink = Uplink(),
     /** Flashlight (camera torch) on. Mirrors the camera's real torch state. */
     val torch: Boolean = false,
+    /** Camera zoom as reported by the camera, and the range it supports. */
+    val zoom: Float = 1f,
+    val zoomMin: Float = 1f,
+    val zoomMax: Float = 1f,
+    /** Zoom the user asked for (pinch / buttons); the camera layer applies it. */
+    val zoomTarget: Float? = null,
     val toast: String? = null,
 )

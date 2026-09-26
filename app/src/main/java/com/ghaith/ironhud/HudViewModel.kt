@@ -106,6 +106,8 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         keepAliveJob?.cancel()
         if (!foreground) {
             jarvis.stop()
+            // The camera restarts at 1× when the app comes back, so forget any pending zoom.
+            _state.update { it.copy(zoomTarget = null) }
             return
         }
         keepAliveJob = viewModelScope.launch {
@@ -176,6 +178,22 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         val center = Offset(viewW / 2f, viewH / 2f)
         val hit = _state.value.targets.filter { it.box.contains(center) }.minByOrNull { it.area }
         if (hit != null) lockOn(hit.id, hit.box, hit.category) else lockOn(null, squareAround(center, SCAN_REGION), null)
+    }
+
+    // ---- zoom ------------------------------------------------------------------------------------
+
+    fun onZoomState(ratio: Float, min: Float, max: Float) =
+        _state.update { it.copy(zoom = ratio, zoomMin = min, zoomMax = max) }
+
+    /** Pinch: multiply the current zoom by [factor]. Builds on the pending target so fast pinches don't lag. */
+    fun zoomBy(factor: Float) = setZoom((_state.value.zoomTarget ?: _state.value.zoom) * factor)
+
+    fun zoomStep(zoomIn: Boolean) = zoomBy(if (zoomIn) ZOOM_STEP else 1f / ZOOM_STEP)
+
+    fun resetZoom() = setZoom(1f)
+
+    private fun setZoom(ratio: Float) = _state.update {
+        if (it.zoomMax <= it.zoomMin) it else it.copy(zoomTarget = ratio.coerceIn(it.zoomMin, it.zoomMax))
     }
 
     // ---- flashlight -------------------------------------------------------------------------------
@@ -368,6 +386,7 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         const val AUTO_SCAN_GAP_MS = 2_500L
         const val KEEP_ALIVE_MS = 50_000L
         const val SCAN_REGION = 0.42f
+        const val ZOOM_STEP = 1.5f
 
         fun formatSeconds(s: Long): String = when {
             s >= 3600 -> "${s / 3600}H ${(s % 3600) / 60}M"
