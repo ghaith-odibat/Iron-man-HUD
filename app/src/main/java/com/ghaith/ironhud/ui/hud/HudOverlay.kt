@@ -53,6 +53,8 @@ fun HudOverlay(
     analyzing: Boolean,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
+    /** The bottom-left tracking read-out (Plane Mode puts its radar there instead). */
+    showStatus: Boolean = true,
 ) {
     val transition = rememberInfiniteTransition(label = "hud")
     val spin = if (animate) {
@@ -102,7 +104,7 @@ fun HudOverlay(
             BasicText(uplink, style = Hud.text(10.sp, alpha = 0.85f), modifier = Modifier.padding(top = 2.dp))
         }
 
-        Column(Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 30.dp)) {
+        if (showStatus) Column(Modifier.align(Alignment.BottomStart).padding(start = 34.dp, bottom = 30.dp)) {
             BasicText("TRACKING  ${tracking.toString().padStart(2, '0')} OBJ", style = Hud.text(12.sp))
             BasicText(
                 if (autoLock) "AUTO-LOCK  ARMED" else "AUTO-LOCK  OFF · TAP TO SCAN",

@@ -21,8 +21,8 @@ sealed interface Chunk {
 interface VisionProvider {
     val id: ProviderId
 
-    /** A streaming "identify this image" request. */
-    fun streamRequest(apiKey: String, model: String, jpeg: ByteArray, userText: String): Request
+    /** A streaming request; [jpeg] is optional (text-only briefs send none). */
+    fun streamRequest(apiKey: String, model: String, jpeg: ByteArray?, system: String, userText: String): Request
 
     /** A cheap authenticated request that proves the key works without spending generate quota. */
     fun probeRequest(apiKey: String): Request
@@ -37,16 +37,16 @@ private const val MAX_OUTPUT_TOKENS = 512
 class GeminiProvider(private val baseUrl: String) : VisionProvider {
     override val id = ProviderId.GEMINI
 
-    override fun streamRequest(apiKey: String, model: String, jpeg: ByteArray, userText: String): Request {
+    override fun streamRequest(apiKey: String, model: String, jpeg: ByteArray?, system: String, userText: String): Request {
         val body = buildJsonObject {
             putJsonObject("systemInstruction") {
-                putJsonArray("parts") { addJsonObject { put("text", Prompt.SYSTEM) } }
+                putJsonArray("parts") { addJsonObject { put("text", system) } }
             }
             putJsonArray("contents") {
                 addJsonObject {
                     put("role", "user")
                     putJsonArray("parts") {
-                        addJsonObject {
+                        if (jpeg != null) addJsonObject {
                             putJsonObject("inlineData") {
                                 put("mimeType", "image/jpeg")
                                 put("data", jpeg.base64())
@@ -106,7 +106,7 @@ class GeminiProvider(private val baseUrl: String) : VisionProvider {
 /** Groq and OpenRouter both speak the OpenAI chat-completions dialect. */
 class OpenAiCompatProvider(override val id: ProviderId, private val baseUrl: String) : VisionProvider {
 
-    override fun streamRequest(apiKey: String, model: String, jpeg: ByteArray, userText: String): Request {
+    override fun streamRequest(apiKey: String, model: String, jpeg: ByteArray?, system: String, userText: String): Request {
         val body = buildJsonObject {
             put("model", model)
             put("stream", true)
@@ -120,9 +120,9 @@ class OpenAiCompatProvider(override val id: ProviderId, private val baseUrl: Str
                         // so the instructions ride in the user turn.
                         addJsonObject {
                             put("type", "text")
-                            put("text", Prompt.SYSTEM + "\n\n" + userText)
+                            put("text", system + "\n\n" + userText)
                         }
-                        addJsonObject {
+                        if (jpeg != null) addJsonObject {
                             put("type", "image_url")
                             putJsonObject("image_url") { put("url", "data:image/jpeg;base64," + jpeg.base64()) }
                         }

@@ -17,6 +17,7 @@ import java.util.Collections
 class IdentifyServiceTest {
     private lateinit var server: MockWebServer
     private val seenKeys = Collections.synchronizedList(mutableListOf<String>())
+    private val bodies = Collections.synchronizedList(mutableListOf<String>())
     private var now = 1_700_000_000_000L
     private val pool = KeyPool { now }
     private lateinit var service: IdentifyService
@@ -48,6 +49,7 @@ class IdentifyServiceTest {
                 val geminiKey = request.getHeader("x-goog-api-key")
                 val bearer = request.getHeader("Authorization")?.removePrefix("Bearer ")
                 seenKeys += geminiKey ?: bearer ?: "none"
+                bodies += request.body.readUtf8()
                 return when {
                     path.startsWith("/gemini/v1beta/models?") -> MockResponse().setBody(
                         """{"models":[{"name":"models/gemini-3.1-flash-lite","supportedGenerationMethods":["generateContent"]}]}"""
@@ -118,6 +120,16 @@ class IdentifyServiceTest {
         pool.configure(emptyList())
         val last = service.identify(byteArrayOf(9), null).toList().single() as ScanEvent.Failed
         assertTrue(last.reason.contains("VAULT"))
+    }
+
+    @Test fun textOnlyDescribeSendsNoImage() = runBlocking {
+        pool.configure(listOf(g2))
+        val done = service.describe("SYSTEM-AIRCRAFT", "Callsign RJA123").toList().last() as ScanEvent.Done
+        assertEquals("Ceramic Coffee Mug", done.brief.name)
+        val sent = bodies.last { it.contains("contents") }
+        assertTrue(sent.contains("SYSTEM-AIRCRAFT"))
+        assertTrue(sent.contains("Callsign RJA123"))
+        assertTrue(!sent.contains("inlineData"))
     }
 
     @Test fun keyTestAcceptsGoodKeyAndRemembersModel() = runBlocking {

@@ -7,7 +7,6 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.BatteryManager
 import android.os.Build
-import android.view.Surface
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -16,62 +15,80 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.ghaith.ironhud.plane.Projector
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 
 /** Where the back camera points: heading (0-360°), pitch and roll in degrees. */
 data class Attitude(val heading: Float = 0f, val pitch: Float = 0f, val roll: Float = 0f)
 
+/**
+ * Live device orientation. [rot] (a low-passed rotation-vector matrix) is updated at sensor rate
+ * without triggering recomposition, for per-frame AR drawing; [attitude] is a throttled Compose
+ * state for the compass/horizon read-outs. Both use [Projector] so the compass and the plane
+ * overlays agree.
+ */
+class SensorHub {
+    @Volatile var rot: FloatArray? = null
+        internal set
+    @Volatile var displayRotation: Int = 0
+        internal set
+    /** Estimated heading accuracy from the sensor, degrees (null when not reported). */
+    @Volatile var headingAccuracyDeg: Float? = null
+        internal set
+    /** East-positive magnetic declination; set once we have a location so the compass reads true north. */
+    @Volatile var declinationDeg: Double = 0.0
+
+    val attitude = mutableStateOf(Attitude())
+}
+
 @Composable
-fun rememberAttitude(): State<Attitude> {
+fun rememberSensorHub(): SensorHub {
     val context = LocalContext.current
-    val state = remember { mutableStateOf(Attitude()) }
+    val hub = remember { SensorHub() }
     DisposableEffect(context) {
         val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensor = sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
             ?: sm.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
-        val rot = FloatArray(9)
-        val remapped = FloatArray(9)
-        val angles = FloatArray(3)
+        val raw = FloatArray(9)
+        val filtered = FloatArray(9)
+        var primed = false
+        var lastAttitude = 0L
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                SensorManager.getRotationMatrixFromVector(rot, event.values)
-                // Remap so the angles describe the camera's line of sight for the current screen rotation.
-                val (x, y) = when (displayRotation(context)) {
-                    Surface.ROTATION_90 -> SensorManager.AXIS_Z to SensorManager.AXIS_MINUS_X
-                    Surface.ROTATION_180 -> SensorManager.AXIS_MINUS_X to SensorManager.AXIS_MINUS_Z
-                    Surface.ROTATION_270 -> SensorManager.AXIS_MINUS_Z to SensorManager.AXIS_X
-                    else -> SensorManager.AXIS_X to SensorManager.AXIS_Z
+                SensorManager.getRotationMatrixFromVector(raw, event.values)
+                if (!primed) {
+                    raw.copyInto(filtered)
+                    primed = true
+                } else {
+                    for (i in 0 until 9) filtered[i] += (raw[i] - filtered[i]) * SMOOTH
                 }
-                SensorManager.remapCoordinateSystem(rot, x, y, remapped)
-                SensorManager.getOrientation(remapped, angles)
-                val heading = ((angles[0] * 180 / PI).toFloat() + 360f) % 360f
-                val pitch = (angles[1] * 180 / PI).toFloat()
-                val roll = (angles[2] * 180 / PI).toFloat()
-                val prev = state.value
-                // Low-pass filter; heading blends along the shortest arc.
-                var dh = heading - prev.heading
-                if (dh > 180) dh -= 360f
-                if (dh < -180) dh += 360f
-                state.value = Attitude(
-                    heading = (prev.heading + dh * SMOOTH + 360f) % 360f,
-                    pitch = prev.pitch + (pitch - prev.pitch) * SMOOTH,
-                    roll = prev.roll + (roll - prev.roll) * SMOOTH,
-                )
+                hub.rot = filtered.copyOf()
+                hub.displayRotation = displayRotation(context)
+                hub.headingAccuracyDeg = event.values.getOrNull(4)
+                    ?.takeIf { it > 0f }?.let { (it * 180f / PI.toFloat()) }
+
+                val now = event.timestamp / 1_000_000
+                if (now - lastAttitude >= ATTITUDE_INTERVAL_MS) {
+                    lastAttitude = now
+                    val o = Projector.orientation(filtered, hub.displayRotation, hub.declinationDeg)
+                    hub.attitude.value = Attitude(o.headingDeg.toFloat(), o.pitchDeg.toFloat(), o.rollDeg.toFloat())
+                }
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
-        if (sensor != null) sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+        if (sensor != null) sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
         onDispose { sm.unregisterListener(listener) }
     }
-    return state
+    return hub
 }
 
-private const val SMOOTH = 0.15f
+private const val SMOOTH = 0.2f
+private const val ATTITUDE_INTERVAL_MS = 66L
 
 @Suppress("DEPRECATION")
-private fun displayRotation(context: Context): Int =
+internal fun displayRotation(context: Context): Int =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         context.display.rotation
     } else {

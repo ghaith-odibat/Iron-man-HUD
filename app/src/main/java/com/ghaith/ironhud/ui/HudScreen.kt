@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,7 +40,8 @@ import com.ghaith.ironhud.ui.camera.CameraLayer
 import com.ghaith.ironhud.ui.hud.ControlRail
 import com.ghaith.ironhud.ui.hud.HudContent
 import com.ghaith.ironhud.ui.hud.ZoomControl
-import com.ghaith.ironhud.ui.hud.rememberAttitude
+import com.ghaith.ironhud.ui.hud.rememberSensorHub
+import com.ghaith.ironhud.ui.plane.PlaneScene
 import com.ghaith.ironhud.ui.hud.rememberBatteryPercent
 import com.ghaith.ironhud.ui.hud.rememberClock
 import com.ghaith.ironhud.ui.theme.Hud
@@ -51,7 +53,11 @@ import kotlinx.coroutines.withContext
 fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val attitude by rememberAttitude()
+    val sensors = rememberSensorHub()
+    val attitude by sensors.attitude
+    val airspace by vm.airspace.collectAsStateWithLifecycle()
+    // Once we know where we are, the compass reads true north (and matches the plane overlays).
+    LaunchedEffect(airspace.declinationDeg) { sensors.declinationDeg = airspace.declinationDeg }
     val clock by rememberClock()
     val battery by rememberBatteryPercent()
     val context = LocalContext.current
@@ -90,6 +96,19 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
     val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) capture() else vm.toast("STORAGE PERMISSION DENIED")
     }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.any { it }) vm.setPlaneMode(true) else vm.toast("LOCATION NEEDED FOR PLANE MODE")
+    }
+    val togglePlane = {
+        when {
+            state.planeMode -> vm.setPlaneMode(false)
+            vm.hasLocationPermission() -> vm.setPlaneMode(true)
+            else -> locationPermission.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+        }
+    }
+
     val snap = {
         val needsPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
@@ -109,6 +128,7 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
             onTorchUnavailable = vm::onTorchUnavailable,
             zoomTarget = state.zoomTarget,
             onZoomState = vm::onZoomState,
+            onOptics = vm::onOptics,
             onPreviewView = { view ->
                 previewView.value = view
                 vm.frameSource = view?.let { v -> { v.bitmap } }
@@ -139,6 +159,18 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
                 battery = battery,
                 onClose = vm::dismiss,
                 onRescan = vm::rescan,
+                plane = if (state.planeMode) {
+                    PlaneScene(
+                        airspace = airspace,
+                        sensors = sensors,
+                        optics = state.optics,
+                        zoom = state.zoom,
+                        selectedHex = state.selectedHex,
+                        panel = state.planePanel,
+                        hits = vm.planeHits,
+                    )
+                } else null,
+                onClosePlane = vm::deselectPlane,
             )
         }
 
@@ -155,6 +187,8 @@ fun HudScreen(vm: HudViewModel, onOpenVault: () -> Unit) {
         ControlRail(
             settings = settings,
             torch = state.torch,
+            planeMode = state.planeMode,
+            onPlane = togglePlane,
             onScan = vm::scanCenter,
             onVoice = { vm.setVoice(!settings.voice) },
             onTint = { vm.setTint(!settings.tint) },

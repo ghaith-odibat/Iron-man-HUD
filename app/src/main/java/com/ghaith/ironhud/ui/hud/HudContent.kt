@@ -39,6 +39,10 @@ import androidx.compose.ui.unit.sp
 import com.ghaith.ironhud.HudState
 import com.ghaith.ironhud.PanelUi
 import com.ghaith.ironhud.data.HudSettings
+import com.ghaith.ironhud.ui.plane.PlaneLayer
+import com.ghaith.ironhud.ui.plane.PlanePanel
+import com.ghaith.ironhud.ui.plane.PlaneScene
+import com.ghaith.ironhud.ui.plane.RadarScope
 import com.ghaith.ironhud.ui.theme.Hud
 
 /** Everything drawn over the camera. Stateless, so it can be rendered in tests without a camera. */
@@ -53,6 +57,9 @@ fun HudContent(
     onRescan: () -> Unit,
     modifier: Modifier = Modifier,
     animate: Boolean = true,
+    /** Non-null in Plane Mode: aircraft overlays replace object scanning. */
+    plane: PlaneScene? = null,
+    onClosePlane: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
@@ -74,9 +81,47 @@ fun HudContent(
             tracking = state.targets.size,
             autoLock = settings.autoLock,
             dwellProgress = state.dwellProgress,
-            analyzing = state.panel?.streaming == true,
+            analyzing = state.panel?.streaming == true || state.planePanel?.streaming == true,
             animate = animate,
+            showStatus = plane == null,
         )
+
+        if (plane != null) {
+            PlaneLayer(plane, Modifier.fillMaxSize(), animate = animate)
+            RadarScope(
+                plane,
+                viewW = with(density) { maxWidth.roundToPx() },
+                viewH = with(density) { maxHeight.roundToPx() },
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 26.dp, bottom = 22.dp),
+                diameter = if (landscape) 190.dp else 170.dp,
+                animate = animate,
+            )
+            AirspaceStatus(plane, Modifier.align(Alignment.TopCenter).padding(top = 96.dp))
+            val selected = plane.selected
+            AnimatedVisibility(
+                visible = selected != null,
+                modifier = if (landscape) {
+                    Modifier.align(Alignment.CenterStart).padding(start = 20.dp, top = 40.dp, bottom = 40.dp)
+                } else {
+                    Modifier.align(Alignment.BottomEnd).padding(bottom = 230.dp, start = 16.dp, end = 16.dp)
+                },
+                enter = if (landscape) slideInHorizontally { -it } + fadeIn() else slideInVertically { it } + fadeIn(),
+                exit = if (landscape) slideOutHorizontally { -it } + fadeOut() else slideOutVertically { it } + fadeOut(),
+            ) {
+                if (selected != null) {
+                    PlanePanel(
+                        aircraft = selected,
+                        viewer = plane.airspace.viewer,
+                        panel = plane.panel,
+                        onClose = onClosePlane,
+                        modifier = Modifier
+                            .width(panelWidth)
+                            .heightIn(max = if (landscape) maxHeight * 0.78f else maxHeight * 0.5f),
+                        animate = animate,
+                    )
+                }
+            }
+        } else {
         TargetBrackets(
             targets = state.targets,
             dwellId = state.dwellId,
@@ -110,6 +155,7 @@ fun HudContent(
                 )
             }
         }
+        }
 
         state.toast?.let {
             BasicText(
@@ -126,11 +172,13 @@ fun HudContent(
     }
 }
 
-/** Right-edge button column: SCAN / VOICE / TINT / AUTO / LIGHT / SNAP / VAULT. */
+/** Right-edge button column: SCAN / PLANE / VOICE / TINT / AUTO / LIGHT / SNAP / VAULT. */
 @Composable
 fun ControlRail(
     settings: HudSettings,
     torch: Boolean,
+    planeMode: Boolean,
+    onPlane: () -> Unit,
     onScan: () -> Unit,
     onVoice: () -> Unit,
     onTint: () -> Unit,
@@ -146,9 +194,10 @@ fun ControlRail(
         horizontalAlignment = Alignment.End,
     ) {
         HudButton("SCAN", active = true, emphasis = true, onClick = onScan)
+        HudButton("PLANE", active = planeMode, onClick = onPlane)
         HudButton("VOICE", active = settings.voice, onClick = onVoice)
         HudButton("TINT", active = settings.tint, onClick = onTint)
-        HudButton("AUTO", active = settings.autoLock, onClick = onAuto)
+        HudButton("AUTO", active = settings.autoLock && !planeMode, onClick = onAuto)
         HudButton("LIGHT", active = torch, onClick = onLight)
         HudButton("SNAP", active = false, onClick = onSnap)
         HudButton("VAULT", active = false, onClick = onVault)
@@ -206,5 +255,26 @@ fun HudButton(label: String, active: Boolean, onClick: () -> Unit, emphasis: Boo
             label,
             style = Hud.text(if (emphasis) 14.sp else 11.sp, alpha = if (active) 1f else 0.55f, weight = FontWeight.Bold, spacing = 1.5.sp),
         )
+    }
+}
+
+/** "AIRSPACE 14 CONTACTS · ADSB.LOL · 3S AGO · GPS ±8 M · HDG ±12°", plus a compass-calibration hint. */
+@Composable
+private fun AirspaceStatus(plane: PlaneScene, modifier: Modifier = Modifier) {
+    val a = plane.airspace
+    val age = if (a.lastUpdateMs == 0L) null else ((plane.clock() - a.lastUpdateMs) / 1000).coerceAtLeast(0)
+    val parts = listOfNotNull(
+        if (a.status == "LIVE") "AIRSPACE ${a.aircraft.size} CONTACTS" else a.status,
+        a.source?.display,
+        age?.let { "${it}S AGO" },
+        a.viewerAccuracyM?.let { "GPS ±${it.toInt()} M" },
+        plane.sensors.headingAccuracyDeg?.let { "HDG ±${it.toInt()}°" },
+    )
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        BasicText(parts.joinToString("  ·  "), style = Hud.text(11.sp, alpha = 0.9f))
+        val acc = plane.sensors.headingAccuracyDeg
+        if (acc != null && acc > 20f) {
+            BasicText("CALIBRATE COMPASS — WAVE THE TABLET IN A FIGURE 8", style = Hud.text(10.sp, alpha = 0.75f))
+        }
     }
 }

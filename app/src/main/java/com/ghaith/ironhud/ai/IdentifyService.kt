@@ -28,7 +28,13 @@ class IdentifyService(
     )
     val models = ModelResolver(http, endpoints, modelOverrides)
 
-    fun identify(jpeg: ByteArray, hint: String?): Flow<ScanEvent> = channelFlow {
+    /** Identify the object in a camera crop. */
+    fun identify(jpeg: ByteArray, hint: String?): Flow<ScanEvent> = stream(jpeg, Prompt.SYSTEM, Prompt.user(hint))
+
+    /** A text-only brief (e.g. about an aircraft from its live data), same key rotation. */
+    fun describe(system: String, user: String): Flow<ScanEvent> = stream(null, system, user)
+
+    private fun stream(jpeg: ByteArray?, system: String, userText: String): Flow<ScanEvent> = channelFlow {
         if (pool.isEmpty()) {
             send(ScanEvent.Failed("NO API KEYS — OPEN THE VAULT", null))
             return@channelFlow
@@ -36,7 +42,6 @@ class IdentifyService(
         val tried = mutableSetOf<String>()
         val skipProviders = mutableSetOf<ProviderId>()
         var lastProblem: String? = null
-        val userText = Prompt.user(hint)
 
         repeat(MAX_ATTEMPTS) {
             val key = pool.acquire(tried, skipProviders) ?: run {
@@ -51,7 +56,7 @@ class IdentifyService(
 
             val started = clock()
             val text = StringBuilder()
-            val failure = runAttempt(provider, key.secret, model, jpeg, userText) { delta ->
+            val failure = runAttempt(provider, key.secret, model, jpeg, system, userText) { delta ->
                 text.append(delta)
                 send(ScanEvent.Partial(BriefParser.parse(text.toString())))
             }
@@ -86,11 +91,12 @@ class IdentifyService(
         provider: VisionProvider,
         apiKey: String,
         model: String,
-        jpeg: ByteArray,
+        jpeg: ByteArray?,
+        system: String,
         userText: String,
         onDelta: suspend (String) -> Unit,
     ): CallFailure? = try {
-        http.newCall(provider.streamRequest(apiKey, model, jpeg, userText)).executeAndUse { resp ->
+        http.newCall(provider.streamRequest(apiKey, model, jpeg, system, userText)).executeAndUse { resp ->
             if (!resp.isSuccessful) {
                 val body = resp.body?.string().orEmpty()
                 ErrorClassifier.classify(provider.id, resp.code, { resp.header(it) }, body, clock())

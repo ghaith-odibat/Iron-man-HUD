@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import com.ghaith.ironhud.ai.Brief
 import com.ghaith.ironhud.ai.ProviderId
+import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.vision.TrackedObject
 
 enum class LockPhase { ANALYZING, LOCKED, OFFLINE }
@@ -55,5 +56,11 @@ data class HudState(
     val zoomMax: Float = 1f,
     /** Zoom the user asked for (pinch / buttons); the camera layer applies it. */
     val zoomTarget: Float? = null,
+    /** Plane Mode: live aircraft overlays replace object scanning. */
+    val planeMode: Boolean = false,
+    /** ICAO hex of the tapped plane, and its AI brief card. */
+    val selectedHex: String? = null,
+    val planePanel: PanelUi? = null,
+    val optics: CameraOptics = CameraOptics(),
     val toast: String? = null,
 )

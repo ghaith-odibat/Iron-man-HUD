@@ -9,6 +9,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghaith.ironhud.ai.ApiKeyEntry
+import com.ghaith.ironhud.ai.Prompt
+import com.ghaith.ironhud.airspace.AirspaceState
+import com.ghaith.ironhud.airspace.AirspaceTracker
+import com.ghaith.ironhud.plane.CameraOptics
+import com.ghaith.ironhud.plane.PlaneHitIndex
+import com.ghaith.ironhud.plane.PlanePrompt
 import com.ghaith.ironhud.ai.Brief
 import com.ghaith.ironhud.ai.Http
 import com.ghaith.ironhud.ai.IdentifyService
@@ -49,7 +55,12 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     private val settingsRepo = SettingsRepository(app)
     private val pool = KeyPool()
     private val modelOverrides = MutableStateFlow<Map<ProviderId, String>>(emptyMap())
-    private val identifier = IdentifyService(pool, Http.newClient(), modelOverrides = { modelOverrides.value })
+    private val http = Http.newClient()
+    private val identifier = IdentifyService(pool, http, modelOverrides = { modelOverrides.value })
+    private val airspaceTracker = AirspaceTracker(app, http, viewModelScope)
+    val airspace: StateFlow<AirspaceState> = airspaceTracker.state
+    /** Screen positions of the planes drawn last frame (written by the plane layer). */
+    val planeHits = PlaneHitIndex()
     private val labeler = OnDeviceLabeler()
     private val jarvis = Jarvis(app)
 
@@ -66,6 +77,9 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     private var viewH = 0
 
     private var scanJob: Job? = null
+    private var planeBriefJob: Job? = null
+    private var foreground = false
+    private val planeBriefCache = HashMap<String, PanelUi>()
     private var keepAliveJob: Job? = null
     private var dwellId: Int? = null
     /** A target the user just dismissed: don't auto-lock it again until it leaves the reticle. */
@@ -103,7 +117,11 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
 
     /** While the HUD is on screen, keep TLS connections warm so a lock doesn't pay for a handshake. */
     fun onForeground(foreground: Boolean) {
+        this.foreground = foreground
         keepAliveJob?.cancel()
+        if (_state.value.planeMode) {
+            if (foreground) airspaceTracker.start() else airspaceTracker.stop()
+        }
         if (!foreground) {
             jarvis.stop()
             // The camera restarts at 1× when the app comes back, so forget any pending zoom.
@@ -127,6 +145,7 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     // ---- targeting ---------------------------------------------------------------------------------
 
     fun onObjects(objects: List<TrackedObject>) {
+        if (_state.value.planeMode) return
         val now = SystemClock.uptimeMillis()
         val current = _state.value
         val lock = current.lock?.let { l ->
@@ -163,6 +182,11 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onTap(point: Offset) {
+        if (_state.value.planeMode) {
+            val hex = planeHits.nearest(point.x, point.y, PLANE_TAP_RADIUS_PX)
+            if (hex != null) selectPlane(hex) else if (_state.value.selectedHex != null) deselectPlane()
+            return
+        }
         val hit = _state.value.targets.filter { it.box.contains(point) }.minByOrNull { it.area }
         if (hit != null) {
             lockOn(hit.id, hit.box, hit.category)
@@ -175,10 +199,89 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
     /** SCAN button: whatever is under the reticle, tracked or not. */
     fun scanCenter() {
         if (viewW == 0) return
+        if (_state.value.planeMode) {
+            planeHits.nearest(viewW / 2f, viewH / 2f, min(viewW, viewH) / 3f)?.let(::selectPlane)
+                ?: toast("NO AIRCRAFT IN THE RETICLE")
+            return
+        }
         val center = Offset(viewW / 2f, viewH / 2f)
         val hit = _state.value.targets.filter { it.box.contains(center) }.minByOrNull { it.area }
         if (hit != null) lockOn(hit.id, hit.box, hit.category) else lockOn(null, squareAround(center, SCAN_REGION), null)
     }
+
+    // ---- plane mode --------------------------------------------------------------------------------
+
+    fun hasLocationPermission() = airspaceTracker.hasPermission()
+
+    fun setPlaneMode(on: Boolean) {
+        if (on == _state.value.planeMode) return
+        if (on) {
+            scanJob?.cancel()
+            jarvis.stop()
+            _state.update {
+                it.copy(planeMode = true, targets = emptyList(), lock = null, panel = null, dwellId = null, dwellProgress = 0f)
+            }
+            if (foreground) airspaceTracker.start()
+            toast("PLANE MODE · SCANNING AIRSPACE")
+        } else {
+            airspaceTracker.stop()
+            planeBriefJob?.cancel()
+            jarvis.stop()
+            planeHits.update(emptyList())
+            _state.update { it.copy(planeMode = false, selectedHex = null, planePanel = null) }
+        }
+    }
+
+    fun deselectPlane() {
+        planeBriefJob?.cancel()
+        jarvis.stop()
+        _state.update { it.copy(selectedHex = null, planePanel = null) }
+    }
+
+    /** Select a plane and have J.A.R.V.I.S. brief it (text-only request, cached per type + operator + flight). */
+    fun selectPlane(hex: String) {
+        val aircraft = airspace.value.aircraft.firstOrNull { it.hex == hex } ?: return
+        planeBriefJob?.cancel()
+        jarvis.stop()
+        val key = PlanePrompt.cacheKey(aircraft)
+        planeBriefCache[key]?.let { cached ->
+            _state.update { it.copy(selectedHex = hex, planePanel = cached.copy(fromCache = true)) }
+            if (settings.value.voice) jarvis.speak(cached.brief)
+            return
+        }
+        _state.update { it.copy(selectedHex = hex, planePanel = PanelUi(status = "QUERYING J.A.R.V.I.S.")) }
+        planeBriefJob = viewModelScope.launch {
+            identifier.describe(Prompt.AIRCRAFT_SYSTEM, PlanePrompt.user(aircraft, airspace.value.viewer)).collect { event ->
+                when (event) {
+                    is ScanEvent.Attempt -> updatePlanePanel {
+                        it.copy(status = "UPLINK ${event.provider.display} · KEY ${event.keyIndex}/${event.keyCount}")
+                    }
+                    is ScanEvent.Partial -> updatePlanePanel { it.copy(brief = event.brief, status = "RECEIVING") }
+                    is ScanEvent.KeySwitched -> updatePlanePanel {
+                        it.copy(status = "${event.provider.display} ${event.reason.substringBefore(" —")} · SWITCHING KEY")
+                    }
+                    is ScanEvent.Done -> {
+                        val panel = (_state.value.planePanel ?: PanelUi()).copy(
+                            brief = event.brief, streaming = false, status = "BRIEF COMPLETE",
+                            source = "${event.provider.display} · ${event.model} · ${event.latencyMs} MS", error = null,
+                        )
+                        planeBriefCache[key] = panel
+                        _state.update { it.copy(planePanel = panel) }
+                        if (settings.value.voice) jarvis.speak(event.brief)
+                    }
+                    is ScanEvent.Failed -> updatePlanePanel {
+                        it.copy(streaming = false, status = "NO AI BRIEF", error = event.reason)
+                    }
+                }
+            }
+        }
+    }
+
+    private inline fun updatePlanePanel(crossinline f: (PanelUi) -> PanelUi) {
+        _state.update { s -> if (s.selectedHex == null) s else s.copy(planePanel = f(s.planePanel ?: PanelUi())) }
+    }
+
+    fun onOptics(optics: CameraOptics) = _state.update { it.copy(optics = optics) }
 
     // ---- zoom ------------------------------------------------------------------------------------
 
@@ -387,6 +490,7 @@ class HudViewModel(app: Application) : AndroidViewModel(app) {
         const val KEEP_ALIVE_MS = 50_000L
         const val SCAN_REGION = 0.42f
         const val ZOOM_STEP = 1.5f
+        const val PLANE_TAP_RADIUS_PX = 90f
 
         fun formatSeconds(s: Long): String = when {
             s >= 3600 -> "${s / 3600}H ${(s % 3600) / 60}M"

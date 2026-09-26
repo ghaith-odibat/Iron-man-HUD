@@ -1,6 +1,11 @@
 package com.ghaith.ironhud.ui.camera
 
 import android.graphics.ColorMatrixColorFilter
+import android.hardware.camera2.CameraCharacteristics
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.CameraInfo
 import android.graphics.Paint
 import android.view.View
 import androidx.camera.core.CameraSelector
@@ -22,6 +27,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.ghaith.ironhud.plane.CameraOptics
 import com.ghaith.ironhud.ui.theme.Hud
 import com.ghaith.ironhud.vision.TrackedObject
 import com.google.mlkit.vision.objects.ObjectDetection
@@ -41,6 +47,7 @@ fun CameraLayer(
     onTorchUnavailable: () -> Unit,
     zoomTarget: Float?,
     onZoomState: (ratio: Float, min: Float, max: Float) -> Unit,
+    onOptics: (CameraOptics) -> Unit,
     onPreviewView: (PreviewView?) -> Unit,
     onObjects: (List<TrackedObject>) -> Unit,
     modifier: Modifier = Modifier,
@@ -91,6 +98,18 @@ fun CameraLayer(
         if (zoomTarget != null && cameraController.cameraInfo != null) cameraController.setZoomRatio(zoomTarget)
     }
 
+    // Lens focal length and sensor size, so Plane Mode can project aircraft with the real field of view.
+    LaunchedEffect(Unit) {
+        var info = cameraController.cameraInfo
+        var waited = 0
+        while (info == null && waited < 10_000) {
+            delay(200)
+            waited += 200
+            info = cameraController.cameraInfo
+        }
+        if (info != null) onOptics(readOptics(info))
+    }
+
     // Flashlight: wait for the camera to be bound, then check it actually has a flash unit.
     LaunchedEffect(torch) {
         var info = cameraController.cameraInfo
@@ -127,6 +146,14 @@ fun CameraLayer(
         update = { view -> applyTint(view, tint) },
     )
 }
+
+@OptIn(ExperimentalCamera2Interop::class)
+private fun readOptics(info: CameraInfo): CameraOptics = runCatching {
+    val c2 = Camera2CameraInfo.from(info)
+    val focal = c2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
+    val size = c2.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+    CameraOptics(focal, size?.width, size?.height)
+}.getOrDefault(CameraOptics())
 
 private fun applyTint(view: View, tint: Boolean) {
     if (tint) {

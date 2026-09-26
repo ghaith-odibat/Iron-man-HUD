@@ -30,6 +30,29 @@ Everything is drawn in a single colour, light tech blue (`#66D9FF`).
 * **HUD chrome:** compass tape from the rotation sensor, artificial horizon, clock, battery,
   uplink status and a scan sweep.
 
+## Plane Mode ✈
+
+Tap **PLANE** to see live aircraft through the camera:
+
+* **3D holograms:** every aircraft within ~50 km is drawn as a blue wireframe model. The model
+  (airliner, wide-body, four-engine, business jet, light aircraft, helicopter) is picked from its
+  type. It is rotated to the plane's real heading and climb, and seen from where you stand, so a
+  plane overhead shows its belly. Models glide smoothly between data updates.
+* **Tags:** each plane is labelled with callsign, type, flight level or altitude, speed and
+  distance. Planes outside the view get arrows on the screen edge.
+* **Radar:** a heading-up scope (bottom left) shows everything around you, with rings at
+  10/25/50 km and your camera's field of view.
+* **Tap a plane:** a card opens with airline, aircraft type, registration, altitude, speed,
+  heading, vertical speed, distance, bearing and squawk. It includes a spinning 3D model, and
+  J.A.R.V.I.S. adds an AI brief (using your Vault keys; cached).
+* **Live data:** adsb.lol, adsb.fi, then the OpenSky Network. They are free, need no key, and the
+  app switches automatically if one fails. Data © adsb.lol (ODbL), adsb.fi and The OpenSky
+  Network, for personal, non-commercial use.
+* **Needs:** location permission (asked the first time), GPS and internet.
+* **Accuracy:** where planes appear depends on the tablet's compass (typically ±5–15°). The status
+  line shows `HDG ±N°`. If it asks you to calibrate, wave the tablet in a figure 8 away from metal
+  and magnets.
+
 ## Install on your tablet
 
 1. On the tablet, open **Releases → latest** in this repo and download one of these:
@@ -54,6 +77,7 @@ key.
 | **RESCAN** / **✕** on the card | Query again / close the card |
 | **VOICE**, **TINT**, **AUTO** | Toggle voice read-out, hologram tint, auto-lock |
 | **LIGHT** | Turn the device flashlight (camera torch) on/off |
+| **PLANE** | Plane Mode: live aircraft as 3D holograms + radar; tap a plane for its card |
 | Pinch with two fingers / **−** **+** | Zoom out / in (tap the ZOOM readout to go back to 1×) |
 | **SNAP** | Save a screenshot with the HUD |
 | **VAULT** | Manage API keys, provider order, models |
