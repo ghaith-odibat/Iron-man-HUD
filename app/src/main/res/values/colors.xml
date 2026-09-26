@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The one and only hue of the app. Every other shade is this colour at lower alpha. -->
+    <color name="hud_blue">#FF66D9FF</color>
+    <color name="hud_black">#FF000000</color>
+</resources>

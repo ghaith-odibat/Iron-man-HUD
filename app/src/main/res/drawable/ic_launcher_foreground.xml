@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arc-reactor style ring in HUD blue, sized for the 108dp adaptive-icon canvas (safe zone 66dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- outer ring -->
+    <path
+        android:pathData="M54,24 A30,30 0 1,1 53.99,24 Z"
+        android:strokeColor="@color/hud_blue"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000" />
+    <!-- segmented middle ring -->
+    <path
+        android:pathData="M76.65,57.99 A23,23 0 0,1 57.99,76.65 M50.01,76.65 A23,23 0 0,1 31.35,57.99 M31.35,50.01 A23,23 0 0,1 50.01,31.35 M57.99,31.35 A23,23 0 0,1 76.65,50.01"
+        android:strokeColor="#9966D9FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="butt"
+        android:fillColor="#00000000" />
+    <!-- inner triangle -->
+    <path
+        android:pathData="M54,40 L66,61 L42,61 Z"
+        android:strokeColor="@color/hud_blue"
+        android:strokeWidth="2"
+        android:fillColor="#3366D9FF" />
+    <!-- core -->
+    <path
+        android:pathData="M54,49 A5,5 0 1,1 53.99,49 Z"
+        android:fillColor="@color/hud_blue" />
+</vector>
