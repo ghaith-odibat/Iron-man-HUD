@@ -129,7 +129,7 @@ fun HudContent(
                 visible = selected != null,
                 modifier = if (landscape) {
                     // Below the status/observer lines and above the radar (the card scrolls if needed).
-                    Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 104.dp)
+                    Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 140.dp)
                 } else {
                     Modifier.align(Alignment.BottomEnd).padding(bottom = 230.dp + bottomInset, start = 16.dp, end = 16.dp)
                 },
@@ -145,7 +145,7 @@ fun HudContent(
                         onClose = onClosePlane,
                         modifier = Modifier
                             .width(panelWidth)
-                            .heightIn(max = if (landscape) (maxHeight - 104.dp - 252.dp).coerceAtLeast(220.dp) else maxHeight * 0.5f),
+                            .heightIn(max = if (landscape) (maxHeight - 140.dp - 252.dp).coerceAtLeast(220.dp) else maxHeight * 0.5f),
                         animate = animate,
                     )
                 }
