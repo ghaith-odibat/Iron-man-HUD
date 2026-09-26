@@ -128,7 +128,8 @@ fun HudContent(
             AnimatedVisibility(
                 visible = selected != null,
                 modifier = if (landscape) {
-                    Modifier.align(Alignment.CenterStart).padding(start = 20.dp, top = 40.dp, bottom = 40.dp)
+                    // Below the status/observer lines and above the radar (the card scrolls if needed).
+                    Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 104.dp)
                 } else {
                     Modifier.align(Alignment.BottomEnd).padding(bottom = 230.dp + bottomInset, start = 16.dp, end = 16.dp)
                 },
@@ -144,7 +145,7 @@ fun HudContent(
                         onClose = onClosePlane,
                         modifier = Modifier
                             .width(panelWidth)
-                            .heightIn(max = if (landscape) maxHeight * 0.78f else maxHeight * 0.5f),
+                            .heightIn(max = if (landscape) (maxHeight - 104.dp - 252.dp).coerceAtLeast(220.dp) else maxHeight * 0.5f),
                         animate = animate,
                     )
                 }
@@ -385,8 +386,8 @@ fun FocusMarkerView(marker: FocusMarker, modifier: Modifier = Modifier) {
 private fun ObserverBar(plane: PlaneScene, onOpenLocation: () -> Unit, onToggleSky: () -> Unit, modifier: Modifier = Modifier) {
     val observer = plane.airspace.observer
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        val text = if (observer == null) "◎ OBSERVER: MY LOCATION (GPS)  ·  CHANGE"
-        else "◎ OBSERVER: ${observer.name.uppercase().take(34)}  ·  VIRTUAL  ·  CHANGE"
+        val text = if (observer == null) "◎ MY LOCATION · CHANGE"
+        else "◎ ${observer.name.substringBefore(",").uppercase().take(24)} · VIRTUAL · CHANGE"
         BasicText(
             text,
             style = Hud.text(11.sp, weight = FontWeight.Bold),

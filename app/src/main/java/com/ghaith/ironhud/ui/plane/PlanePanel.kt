@@ -81,6 +81,7 @@ fun PlanePanel(
             .background(Hud.Black.copy(alpha = 0.62f), shape)
             .background(Hud.blue(0.07f), shape)
             .border(1.dp, Hud.blue(0.75f), shape)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp, vertical = 14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -142,7 +143,7 @@ fun PlanePanel(
             drawLine(Hud.blue(0.25f), Offset(size.width * 0.37f, 0f), Offset(size.width, 0f), 1f)
         }
 
-        Column(Modifier.verticalScroll(rememberScrollState())) {
+        Column {
             if (panel != null && (panel.brief.summary.isNotBlank() || panel.streaming)) {
                 val brief = panel.brief
                 val cursor = if (panel.streaming) " ▌" else ""
