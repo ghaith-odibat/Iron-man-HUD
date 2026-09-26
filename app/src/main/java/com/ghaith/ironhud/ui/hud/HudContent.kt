@@ -96,7 +96,8 @@ fun HudContent(
                 diameter = if (landscape) 190.dp else 170.dp,
                 animate = animate,
             )
-            AirspaceStatus(plane, Modifier.align(Alignment.TopCenter).padding(top = 96.dp))
+            // Portrait is narrow: drop the status line below the uplink read-out.
+            AirspaceStatus(plane, Modifier.align(Alignment.TopCenter).padding(top = if (landscape) 96.dp else 132.dp))
             val selected = plane.selected
             AnimatedVisibility(
                 visible = selected != null,

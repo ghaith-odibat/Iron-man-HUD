@@ -103,10 +103,7 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
             if (selected) drawPath(path, Hud.blue(0.25f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round))
             drawPath(path, Hud.blue(alpha), style = Stroke((if (selected) 1.8 else 1.3).dp.toPx(), cap = StrokeCap.Round))
 
-            // Data tag with a leader line.
-            val tagX = sp.x + lengthPx * 0.55f
-            val tagY = sp.y - lengthPx * 0.45f
-            drawLine(Hud.blue(alpha * 0.7f), Offset(sp.x + lengthPx * 0.2f, sp.y - lengthPx * 0.15f), Offset(tagX, tagY + 4.dp.toPx()), 1.dp.toPx())
+            // Data tag with a leader line (flipped to the left near the right edge).
             val title = tm.measure(
                 a.label + (a.typeCode?.let { "  $it" } ?: ""),
                 Hud.text(12.sp, alpha = alpha, weight = FontWeight.Bold, glow = false),
@@ -116,11 +113,18 @@ fun PlaneLayer(scene: PlaneScene, modifier: Modifier = Modifier, animate: Boolea
                 Hud.text(10.sp, alpha = alpha * 0.9f, glow = false),
             )
             val line3 = tm.measure(PlaneFormat.distance(distKm), Hud.text(10.sp, alpha = alpha * 0.75f, glow = false))
+            val tagW = maxOf(title.size.width, line2.size.width, line3.size.width)
+            val flip = sp.x + lengthPx * 0.55f + tagW > size.width - 12.dp.toPx()
+            val tagX = if (flip) sp.x - lengthPx * 0.55f - tagW else sp.x + lengthPx * 0.55f
+            val tagY = sp.y - lengthPx * 0.45f
+            val anchorX = if (flip) tagX + tagW else tagX
+            drawLine(Hud.blue(alpha * 0.7f), Offset(sp.x + (if (flip) -1 else 1) * lengthPx * 0.2f, sp.y - lengthPx * 0.15f),
+                Offset(anchorX, tagY + 4.dp.toPx()), 1.dp.toPx())
             drawText(title, topLeft = Offset(tagX, tagY - title.size.height))
             drawText(line2, topLeft = Offset(tagX, tagY + 2.dp.toPx()))
             drawText(line3, topLeft = Offset(tagX, tagY + 2.dp.toPx() + line2.size.height))
 
-            if (selected) lockBrackets(Offset(sp.x, sp.y), lengthPx * 0.75f)
+            if (selected) lockBrackets(Offset(sp.x, sp.y), lengthPx * 0.62f)
             hits += a.hex to (sp.x to sp.y)
         }
 
@@ -148,12 +152,15 @@ private fun DrawScope.lockBrackets(c: Offset, half: Float) {
 }
 
 private fun DrawScope.edgeArrow(tm: TextMeasurer, a: Aircraft, angle: Double, distKm: Double, selected: Boolean) {
-    val inset = 70.dp.toPx()
+    val left = 60.dp.toPx()
+    val right = 116.dp.toPx()
+    val top = 150.dp.toPx()
+    val bottom = 60.dp.toPx()
     val c = center
     val dx = cos(angle).toFloat()
     val dy = sin(angle).toFloat()
-    val tx = if (dx > 1e-4f) (size.width - inset - c.x) / dx else if (dx < -1e-4f) (inset - c.x) / dx else Float.MAX_VALUE
-    val ty = if (dy > 1e-4f) (size.height - inset - c.y) / dy else if (dy < -1e-4f) (inset - c.y) / dy else Float.MAX_VALUE
+    val tx = if (dx > 1e-4f) (size.width - right - c.x) / dx else if (dx < -1e-4f) (left - c.x) / dx else Float.MAX_VALUE
+    val ty = if (dy > 1e-4f) (size.height - bottom - c.y) / dy else if (dy < -1e-4f) (top - c.y) / dy else Float.MAX_VALUE
     val t = min(tx, ty)
     val p = Offset(c.x + dx * t, c.y + dy * t)
     val len = 16.dp.toPx()
