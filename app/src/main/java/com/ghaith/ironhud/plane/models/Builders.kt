@@ -2,6 +2,7 @@ package com.ghaith.ironhud.plane.models
 
 import com.ghaith.ironhud.plane.Lod
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -111,7 +112,7 @@ private fun lerp(a: Double, b: Double, t: Double) = a + (b - a) * t
 internal fun tube(
     L: Double, W: Double, H: Double, nose: Double, tail: Double,
     noseTip: Double = -0.3, blunt: Double = 0.5, tailZ: Double = 0.45, tailR: Double = 0.12,
-    hump: Hump? = null, keel: Hump? = null,
+    hump: Hump? = null, keel: Hump? = null, cab: Cab? = null,
 ): List<Section> {
     val cylEnd = L - tail
     val zTip = noseTip * H / 2
@@ -119,7 +120,7 @@ internal fun tube(
         s < nose -> {
             val f = s / nose
             val g = 1 - (1 - f) * (1 - f)
-            val top = zTip + (H / 2 - zTip) * g.pow(blunt * 1.25)
+            val top = if (cab != null) H * cab.top(s / H, zTip / H) else zTip + (H / 2 - zTip) * g.pow(blunt * 1.25)
             val bottom = zTip - (H / 2 + zTip) * g.pow(blunt * 0.8)
             Section(s, W / 2 * g.pow(blunt), (top + bottom) / 2, (top - bottom) / 2)
         }
@@ -135,7 +136,9 @@ internal fun tube(
     }
     val frames = ((cylEnd - nose) / (1.2 * H)).roundToInt().coerceIn(2, 14)
     val stations = sortedSetOf<Double>()
-    listOf(0.0, 0.02, 0.06, 0.13, 0.23, 0.36, 0.52, 0.72, 1.0).forEach { stations += it * nose }
+    listOf(0.0, 0.007, 0.02, 0.06, 0.13, 0.23, 0.36, 0.52, 0.72, 1.0).forEach { stations += it * nose }
+    // The windscreen's foot and head are creases in the crest: they get a station each, come what may.
+    val creases = cab?.let { c -> listOf(c.sW, (c.sW + c.sT) / 2, c.sT, (c.sT + c.sR) / 2, c.sR).map { it * H }.filter { it < nose } }.orEmpty()
     for (i in 0..frames) stations += nose + (cylEnd - nose) * i / frames
     listOf(0.15, 0.32, 0.5, 0.67, 0.82, 0.93, 1.0).forEach { stations += cylEnd + it * tail }
     hump?.keys?.forEach { if (it in 0.0..L) stations += it }
@@ -143,6 +146,11 @@ internal fun tube(
     // Drop stations closer than 0.3 m to the previous one.
     val kept = ArrayList<Double>()
     for (s in stations) if (kept.isEmpty() || s - kept.last() > 0.3 || s == L) kept += s
+    if (creases.isNotEmpty()) {
+        kept.removeAll { k -> k > 0 && creases.any { abs(it - k) < min(0.3, 0.08 * H) } }
+        kept += creases
+        kept.sort()
+    }
     return kept.map { s ->
         var sec = base(s)
         if (hump != null) {
@@ -152,6 +160,15 @@ internal fun tube(
         if (keel != null) sec = sec.copy(down = sec.down + keel.h * keel.frac(s))
         sec
     }
+}
+
+/** The first station where the crest of [sections] reaches [z] metres (searching up to [limit]). */
+internal fun crest(sections: List<Section>, z: Double, limit: Double): Double {
+    val probe = Body(sections)
+    val step = limit / 500
+    var s = sections.first().s
+    while (s < limit && probe.at(s).top < z) s += step
+    return s
 }
 
 /** Sections from a table of (fraction of L, half-width/W, centre/H, up/H, down/H), all over halves. */
@@ -421,8 +438,9 @@ internal fun jet(
         if (decks == 2) add(WindowRow(noseM * 0.95, L - tailM * 0.95, 48.0, windowPitch, windowSize))
         if (hump != null && hump.h > 0.8) add(WindowRow(hump.start + hump.rampIn * 0.9, hump.end - hump.rampOut * 0.9, 58.0, windowPitch, windowSize))
     }
-    val body = Body(tube(L, W, H, noseM, tailM, noseTip, blunt, tailZ, tailR, hump, keel), box = box, windows = rows,
-        cockpit = Cockpit(noseM * 0.38, noseM * 0.5, shield))
+    val sections = tube(L, W, H, noseM, tailM, noseTip, blunt, tailZ, tailR, hump, keel, shield.cab)
+    val cockpit = shield.anchor?.let { Cockpit(crest(sections, it * H, L * 0.5), H, shield) } ?: Cockpit(noseM * 0.38, noseM * 0.5, shield)
+    val body = Body(sections, box = box, windows = rows, cockpit = cockpit)
     parts += body
 
     val zw = wingZ * H / 2

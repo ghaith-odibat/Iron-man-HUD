@@ -155,16 +155,16 @@ private class Catalog {
         add("B788", "Boeing 787-8 Dreamliner", WIDEBODY, "2 × GEnx-1B / RR Trent 1000") { b787(56.72) }
         add("B789", "Boeing 787-9 Dreamliner", WIDEBODY, "2 × GEnx-1B / RR Trent 1000") { b787(62.81) }
         add("B78X", "Boeing 787-10 Dreamliner", WIDEBODY, "2 × GEnx-1B / RR Trent 1000") { b787(68.28) }
-        add("B741 B742", "Boeing 747-100/200", QUAD, "4 × PW JT9D / GE CF6-50 / RB211-524") { b747(70.6, 59.64, Tip.None, 23.0, JT9D) }
-        add("B743", "Boeing 747-300", QUAD, "4 × PW JT9D / GE CF6-50 / RB211-524") { b747(70.6, 59.64, Tip.None, 30.5, JT9D) }
+        add("B741 B742", "Boeing 747-100/200", QUAD, "4 × PW JT9D / GE CF6-50 / RB211-524") { b747(70.6, 59.64, Tip.None, 23.0, JT9D, shield = Windshields.B747_EYEBROW) }
+        add("B743", "Boeing 747-300", QUAD, "4 × PW JT9D / GE CF6-50 / RB211-524") { b747(70.6, 59.64, Tip.None, 30.5, JT9D, shield = Windshields.B747_EYEBROW) }
         add("B744", "Boeing 747-400", QUAD, "4 × GE CF6-80C2 / PW4056 / RB211-524") {
             b747(70.66, 64.44, Tip.Winglet(1.83, cant = 29.0, sweep = 60.0, blend = 0.0), 30.5, CF6_747)
         }
         add("B748", "Boeing 747-8", QUAD, "4 × GEnx-2B") { b747(76.25, 68.4, Tip.Raked(4.2), 34.5, GENX_2B) }
-        add("B74S", "Boeing 747SP", QUAD, "4 × PW JT9D / RB211-524") { b747(56.31, 59.64, Tip.None, 23.0, JT9D, wingLE = 16.5) }
+        add("B74S", "Boeing 747SP", QUAD, "4 × PW JT9D / RB211-524") { b747(56.31, 59.64, Tip.None, 23.0, JT9D, wingLE = 16.5, shield = Windshields.B747_EYEBROW) }
         add("BLCF", "Boeing 747 Dreamlifter", QUAD, "4 × PW4062") {
             b747(71.68, 64.44, Tip.Winglet(1.83, cant = 29.0, sweep = 60.0, blend = 0.0), 30.5, CF6_747,
-                lobe = Hump(12.0, 60.0, 3.6, 9.0, 8.0, widen = 1.35))
+                lobe = Hump(12.0, 60.0, 3.6, 9.0, 8.0, widen = 1.35), shield = Windshields.B747_LCF)
         }
         add("B703", "Boeing 707-320", QUAD, "4 × PW JT3D") { b707(46.61, 44.42, JT3D) }
         add("K35R", "Boeing KC-135R Stratotanker", MILITARY, "4 × CFM F108") { kc135() }
@@ -279,7 +279,7 @@ private class Catalog {
             jet(L = 46.1, W = 3.8, H = 4.1, nose = 1.9, tailCone = 2.7, span = 41.8, root = 8.5, tipChord = 1.8, sweep = 30.0,
                 wingAt = 0.38, kink = 0.33, tip = Tip.Winglet(1.9, cant = 15.0, blend = 0.0),
                 engines = listOf(WingEng(listOf(0.33), 5.3, 2.2, overhang = 0.55, drop = 0.2)),
-                finH = 7.2, finRoot = 6.6, finTip = 2.4, finSweep = 40.0, stabSpan = 15.0, stabRoot = 4.2, stabTip = 1.4, stabSweep = 32.0, shield = Windshields.BOEING_6)
+                finH = 7.2, finRoot = 6.6, finTip = 2.4, finSweep = 40.0, stabSpan = 15.0, stabRoot = 4.2, stabTip = 1.4, stabSweep = 32.0, shield = Windshields.B757_6)
         }
         add("IL62", "Ilyushin Il-62", QUAD, "4 × Soloviev D-30KU") {
             jet(L = 53.12, W = 3.75, H = 3.75, nose = 2.2, tailCone = 3.3, blunt = 0.65, span = 43.2, root = 9.0, tipChord = 2.4, sweep = 35.0,
@@ -724,7 +724,7 @@ private fun a300(L: Double, span: Double, wingLE: Double, tip: Tip, lobe: Hump? 
     L = L, W = 5.64, H = 5.64, nose = 1.6, tailCone = 2.6, noseTip = if (lobe != null) -0.5 else -0.3, hump = lobe,
     windows = lobe == null, span = span, root = 11.0, tipChord = 2.5, sweep = 30.0, dihedral = 5.5, wingAt = wingLE / L, kink = 0.33,
     tip = tip, engines = listOf(CF6_A300), finH = 8.5, finRoot = 8.0, finTip = 2.6, finSweep = 40.0,
-    stabSpan = 16.3, stabRoot = 4.8, stabTip = 1.6, stabSweep = 34.0, stabDihedral = 6.0, shield = if (lobe != null) Windshields.AIRBUS_BELUGA else Windshields.AIRBUS_6,
+    stabSpan = 16.3, stabRoot = 4.8, stabTip = 1.6, stabSweep = 34.0, stabDihedral = 6.0, shield = if (lobe != null) Windshields.AIRBUS_BELUGA else Windshields.AIRBUS_WIDE_6,
 )
 
 private fun a330(L: Double, span: Double, tip: Tip, eng: WingEng, lobe: Hump? = null) = jet(
@@ -732,7 +732,7 @@ private fun a330(L: Double, span: Double, tip: Tip, eng: WingEng, lobe: Hump? = 
     windows = lobe == null, span = span, root = 12.8, tipChord = 2.2, sweep = 32.0, dihedral = 5.5,
     wingAt = (22.0 + (L - 63.67) * 0.55) / L, kink = 0.33, tip = tip, engines = listOf(eng),
     finH = 8.3, finRoot = 8.6, finTip = 3.0, finSweep = 43.0,
-    stabSpan = 19.4, stabRoot = 5.8, stabTip = 1.8, stabSweep = 32.0, stabDihedral = 6.0, shield = if (lobe != null) Windshields.AIRBUS_BELUGA else Windshields.AIRBUS_6,
+    stabSpan = 19.4, stabRoot = 5.8, stabTip = 1.8, stabSweep = 32.0, stabDihedral = 6.0, shield = if (lobe != null) Windshields.AIRBUS_BELUGA else Windshields.AIRBUS_WIDE_6,
 )
 
 private fun a350(L: Double, eng: WingEng) = jet(
@@ -740,7 +740,7 @@ private fun a350(L: Double, eng: WingEng) = jet(
     span = 64.75, root = 14.5, tipChord = 2.0, sweep = 34.0, dihedral = 6.0, wingAt = (24.0 + (L - 66.8) * 0.55) / L, kink = 0.33,
     tip = Tip.Winglet(3.4, cant = 20.0, sweep = 55.0, blend = 0.65, taper = 0.3, label = "CURVED SHARKLETS"),
     engines = listOf(eng), finH = 9.2, finRoot = 9.0, finTip = 3.2, finSweep = 42.0,
-    stabSpan = 18.9, stabRoot = 5.9, stabTip = 1.8, stabSweep = 34.0, stabDihedral = 6.0, windowPitch = 0.6, windowSize = 0.32, shield = Windshields.A350_4_MASK,
+    stabSpan = 18.9, stabRoot = 5.9, stabTip = 1.8, stabSweep = 34.0, stabDihedral = 6.0, windowPitch = 0.6, windowSize = 0.32, shield = Windshields.A350_6_MASK,
 )
 
 private fun a380() = jet(
@@ -748,7 +748,7 @@ private fun a380() = jet(
     span = 79.75, root = 19.0, tipChord = 4.0, sweep = 36.0, dihedral = 5.6, wingAt = 0.36, kink = 0.30, tip = Tip.Fence(3.5),
     engines = listOf(WingEng(listOf(0.36, 0.64), 7.3, 3.4, overhang = 0.5, drop = 0.18)),
     finH = 12.2, finRoot = 13.5, finTip = 4.5, finSweep = 45.0,
-    stabSpan = 30.37, stabRoot = 9.0, stabTip = 2.8, stabSweep = 36.0, shield = Windshields.AIRBUS_6,
+    stabSpan = 30.37, stabRoot = 9.0, stabTip = 2.8, stabSweep = 36.0, shield = Windshields.A380_6,
 )
 
 private fun a400m() = jet(
@@ -772,21 +772,21 @@ internal fun b757(L: Double) = jet(
     span = 41.1, root = 8.6, tipChord = 1.7, sweep = 27.5, wingAt = (16.8 + (L - 47.32) * 0.55) / L, kink = 0.32,
     tip = Tip.Winglet(2.3, cant = 10.0, sweep = 42.0, blend = 0.35), engines = listOf(RB211_535),
     finH = 7.8, finRoot = 6.8, finTip = 2.4, finSweep = 38.0, dorsal = true,
-    stabSpan = 15.2, stabRoot = 4.2, stabTip = 1.4, stabSweep = 32.0, stabDihedral = 7.0, shield = Windshields.BOEING_6,
+    stabSpan = 15.2, stabRoot = 4.2, stabTip = 1.4, stabSweep = 32.0, stabDihedral = 7.0, shield = Windshields.B757_6,
 )
 
 private fun b767(L: Double, span: Double, tip: Tip) = jet(
     L = L, W = 5.03, H = 5.41, nose = 1.75, tailCone = 2.6, noseTip = -0.3,
     span = span, root = 11.5, tipChord = 2.3, sweep = 34.0, dihedral = 6.0, wingAt = (19.5 + (L - 54.94) * 0.55) / L, kink = 0.3,
     tip = tip, engines = listOf(CF6_767), finH = 8.7, finRoot = 8.5, finTip = 2.8, finSweep = 38.0,
-    stabSpan = 18.6, stabRoot = 5.2, stabTip = 1.6, stabSweep = 32.0, stabDihedral = 7.0, shield = Windshields.BOEING_6,
+    stabSpan = 18.6, stabRoot = 5.2, stabTip = 1.6, stabSweep = 32.0, stabDihedral = 7.0, shield = Windshields.B767_6,
 )
 
 internal fun b777(L: Double, span: Double, tip: Tip, eng: WingEng) = jet(
     L = L, W = 6.2, H = 6.2, nose = 1.6, tailCone = 2.7, noseTip = -0.25, tailZ = 0.55, tailR = 0.08,
     span = span, root = 15.0, tipChord = 2.6, sweep = 33.5, dihedral = 6.0, wingAt = (23.5 + (L - 63.73) * 0.55) / L, kink = 0.32,
     tip = tip, engines = listOf(eng), finH = 9.3, finRoot = 10.0, finTip = 3.3, finSweep = 40.0,
-    stabSpan = 21.5, stabRoot = 6.4, stabTip = 2.2, stabSweep = 33.0, stabDihedral = 6.0, shield = Windshields.BOEING_6,
+    stabSpan = 21.5, stabRoot = 6.4, stabTip = 2.2, stabSweep = 33.0, stabDihedral = 6.0, shield = Windshields.B777_6,
 )
 
 private fun b787(L: Double) = jet(
@@ -796,12 +796,15 @@ private fun b787(L: Double) = jet(
     stabSpan = 19.8, stabRoot = 5.8, stabTip = 1.6, stabSweep = 36.0, stabDihedral = 7.0, windowPitch = 0.6, windowSize = 0.36, shield = Windshields.B787_4,
 )
 
-private fun b747(L: Double, span: Double, tip: Tip, deckEnd: Double, eng: WingEng, wingLE: Double = 22.5 + (L - 70.66) * 0.55, lobe: Hump? = null) = jet(
+private fun b747(
+    L: Double, span: Double, tip: Tip, deckEnd: Double, eng: WingEng, wingLE: Double = 22.5 + (L - 70.66) * 0.55, lobe: Hump? = null,
+    shield: Windshield = Windshields.B747_6,
+) = jet(
     L = L, W = 6.5, H = 6.5, nose = 1.7, tailCone = 2.6, noseTip = -0.35, windows = lobe == null,
     hump = lobe ?: Hump(start = 2.0, end = deckEnd, h = 1.45, rampIn = 7.5, rampOut = 4.0),
     span = span, root = 16.6, tipChord = 4.0, sweep = 40.0, dihedral = 7.0, wingAt = wingLE / L, kink = 0.33,
     tip = tip, engines = listOf(eng), finH = 10.0, finRoot = 10.7, finTip = 3.9, finSweep = 45.0,
-    stabSpan = 22.2, stabRoot = 7.4, stabTip = 2.3, stabSweep = 37.0, stabDihedral = 7.0, shield = Windshields.BOEING_6,
+    stabSpan = 22.2, stabRoot = 7.4, stabTip = 2.3, stabSweep = 37.0, stabDihedral = 7.0, shield = shield,
 )
 
 private fun b707(L: Double, span: Double, eng: WingEng, windows: Boolean = true, extra: (Body, WingPlan) -> List<Part> = { _, _ -> emptyList() },
@@ -948,7 +951,7 @@ private fun erj(L: Double, span: Double = 20.04, tip: Tip = Tip.None) = jet(
     span = span, root = 3.9, tipChord = 1.05, sweep = 23.0, wingAt = (10.5 + (L - 29.87) * 0.5) / L, kink = 0.0,
     tip = tip, engines = listOf(RearEng((L - 8.2) / L, 3.4, 1.3, z = 0.3)), tail = TailKind.T,
     finH = 3.3, finRoot = 3.4, finTip = 2.0, finSweep = 40.0, stabSpan = 7.55, stabRoot = 2.1, stabTip = 1.0, stabSweep = 25.0,
-    stabDihedral = 0.0, windowPitch = 0.55, shield = Windshields.ERJ_6,
+    stabDihedral = 0.0, windowPitch = 0.55, shield = Windshields.ERJ_4,
 )
 
 private fun crj(L: Double, span: Double, stabSpan: Double, big: Boolean, biz: Boolean = false) = jet(

@@ -1,6 +1,8 @@
 package com.ghaith.ironhud.plane
 
 import com.ghaith.ironhud.plane.models.AircraftTypes
+import com.ghaith.ironhud.plane.models.Body
+import com.ghaith.ironhud.plane.models.Glazing
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -72,14 +74,47 @@ class AircraftTest {
         assertFalse(f("B738").any { "EYEBROW" in it })             // …the NG and MAX dropped them
         assertTrue(f("MD82").any { "EYEBROW" in it })
         assertFalse(f("B77W").any { "EYEBROW" in it })
-        assertTrue("4-PANE CURVED WINDSHIELD · MASK" in f("A359"))
-        assertTrue("4-PANE FLIGHT DECK" in f("B788"))
+        assertTrue(f("B742").any { "EYEBROW" in it })              // early 747s had them, the -400 did not
+        assertFalse(f("B744").any { "EYEBROW" in it })
+        assertTrue("6-PANE CURVED WINDSHIELD · MASK" in f("A359"))  // A350: six curved panes in the mask
+        assertTrue("4-PANE FLIGHT DECK" in f("B788"))               // 787: four
+        assertTrue("4-PANE FLIGHT DECK" in f("E145"))
         assertTrue("6-PANE FLIGHT DECK" in f("A320"))
         assertTrue("ONE-PIECE WINDSHIELD" in f("C172"))
         assertTrue("BUBBLE CANOPY" in f("R44"))
         assertTrue("FRAMELESS BUBBLE CANOPY" in f("F16"))
         assertTrue("TANDEM CANOPY" in f("PC21"))
         assertTrue(f("IL76").any { "GLAZED NAVIGATOR NOSE" in it })
+    }
+
+    @Test fun windowsSitOnTheSkin() {
+        val off = ArrayList<String>()
+        for (a in AircraftTypes.catalog) {
+            for (body in a.design.parts.filterIsInstance<Body>()) {
+                val c = body.cockpit ?: continue
+                val g = Glazing(body, c)
+                for (p in c.shield.panes + listOfNotNull(c.shield.mask)) {
+                    for (corner in p.corners) if (!g.onSkin(corner)) off += "${a.id} $corner"
+                }
+            }
+        }
+        assertTrue("corners off the skin: ${off.map { it.substringBefore(" ") }.distinct()} (${off.size})", off.isEmpty())
+    }
+
+    @Test fun jetNosesRiseToTheirWindscreens() {
+        for (a in AircraftTypes.catalog) {
+            val cab = a.design.parts.filterIsInstance<Body>().firstNotNullOfOrNull { it.cockpit?.shield?.cab } ?: continue
+            var last = -1.0
+            var x = 0.0
+            while (x <= cab.sR + 0.1) {
+                val z = cab.top(x, -0.15)
+                assertTrue("${a.id} crest falls at $x", z >= last - 1e-9)
+                last = z
+                x += 0.01
+            }
+            assertEquals("${a.id} windscreen foot", cab.zW, cab.top(cab.sW, -0.15), 1e-6)
+            assertEquals("${a.id} full crown", 0.5, cab.top(cab.sR, -0.15), 1e-6)
+        }
     }
 
     @Test fun windshieldsShowOnLiveModelsButNotFarAway() {

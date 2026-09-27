@@ -66,10 +66,15 @@ Tap **PLANE** to see live aircraft through the camera:
   * 747-400 winglets and upper deck vs 747-8 raked tips and longer deck.
   * 777-300ER raked tips vs 777X folding tips.
   * Fenestron vs tail rotor, skids vs wheels.
-  * Each type has its own windshield:
-    * Airliners: 6-pane Airbus with notched rear windows, the A350's 4 curved panes in their mask,
-      and the 787's 4 panes. Eyebrow windows on the 737 Classic, 707/727 and DC-9/MD-80, but not
-      on the 737NG/MAX or 777.
+  * Each type has its own windshield, laid out as on its 3-view plans. The windscreen sits on a
+    nose shaped for it, from the radome up to the windscreen and over to the roof. Posts are
+    narrow, corners are rounded, and up close each window shows its frame, glass edge and parked
+    wipers.
+    * Airbus: level sills and the notched rear window. The A350 has 6 curved panes in its mask.
+    * Boeing: the V-shaped sill. The 737's rear window narrows to the top, the 777's is rounded,
+      and the 787's 4 panes taper aft to a point.
+    * Eyebrow windows on the 737 Classic, 707/727, early 747s and DC-9/MD-80, but not on the
+      737NG/MAX, 747-400 or 777.
     * Military: the Il-76 glazed navigator nose, and the chin windows on the C-130 and C-17.
     * Light aircraft: one-piece Cessna and Piper screens, the Cirrus wrap and the Diamond bubble.
     * Canopies: framed and frameless fighter canopies, tandem trainer canopies and glider canopies.
@@ -162,7 +167,7 @@ CameraX preview ──► ML Kit object tracker (on-device, every frame) ──�
 
 Aircraft models: `plane/models/` holds the parametric geometry (lofted fuselages, tapered wings
 with winglet/raked/fence tips, nacelles, props, rotors, gear) and `AircraftTypes`, the type
-catalogue. `Windshields` holds the per-type glazing layouts, drawn as panes over the nose.
+catalogue. `Windshields` holds the per-type glazing layouts and `Glazing` lays them onto the skin.
 Meshes are built at three levels of detail and cached. `WireProjection` projects them
 into reusable line buffers, drawn in one batched call per brightness.
 

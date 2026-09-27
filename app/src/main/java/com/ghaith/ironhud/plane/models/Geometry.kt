@@ -50,24 +50,89 @@ data class Section(val s: Double, val halfW: Double, val zc: Double, val up: Dou
 data class WindowRow(val s0: Double, val s1: Double, val angleDeg: Double, val pitch: Double = 0.53, val size: Double = 0.26)
 
 /**
- * A window or frame drawn on a body's surface. Corners are (u, deg): u runs 0..1 through the
- * glazing zone of a [Cockpit], deg goes round the section from the side line (0) over the top (90)
- * to the far side (180), negative below the side line. Panes are repeated on the left unless they
- * cross the centreline ([mirror] = false); [closed] = false draws an open frame (canopy bow, sill);
- * [essential] panes are also drawn on live, mid-detail models.
+ * A corner of a window, in cockpit units ([Cockpit.unit] metres) with s aft of [Cockpit.s0]. Corners
+ * are pinned the way windows are drawn on real 3-view plans, and an edge between two corners of the
+ * same kind is straight in that view.
+ */
+sealed interface Gp {
+    val s: Double
+
+    /**
+     * Side view: [z] above the body centreline, projected sideways onto the right-hand skin, then
+     * [lift] degrees further round the section (eyebrow windows sit just above the side windows).
+     */
+    data class Side(override val s: Double, val z: Double, val lift: Double = 0.0) : Gp
+
+    /** Plan view: [x] out from the centreline (negative to the left), projected down onto the upper skin. */
+    data class Plan(override val s: Double, val x: Double) : Gp
+
+    /** Round the section: [deg] from the side line (0) over the top (90) to the far side (180), negative below. */
+    data class Deg(override val s: Double, val deg: Double) : Gp
+}
+
+/**
+ * A window (or open frame: a canopy bow or sill) on a body's skin. Panes are repeated on the left
+ * unless they cross the centreline ([mirror] = false); [essential] panes are also drawn on live,
+ * mid-detail models. Corners are rounded by [round] (or [radii], one per corner) and, up close, the
+ * glass edge is drawn [frame] inside the frame line. All lengths in cockpit units.
  */
 data class Pane(
-    val corners: List<Pair<Double, Double>>,
+    val corners: List<Gp>,
     val mirror: Boolean = true,
     val closed: Boolean = true,
     val essential: Boolean = false,
+    val round: Double = 0.0,
+    val radii: List<Double>? = null,
+    val frame: Double = 0.0,
 )
 
-/** A type's flight-deck glazing: its panes, an optional faint outline (the A350's mask), and a spec-sheet label. */
-class Windshield(val label: String, val panes: List<Pane>, val mask: Pane? = null)
+/**
+ * A parked wiper on the edge of pane [pane] that runs from corner [edge] to the next: pivot and
+ * blade tip as fractions along that edge, [inset] cockpit units inside the glass.
+ */
+data class Wiper(val pane: Int, val edge: Int, val pivot: Double, val tip: Double, val inset: Double)
 
-/** The glazing zone, stations [s] to [s] + [len], and the windshield in it. */
-data class Cockpit(val s: Double, val len: Double, val shield: Windshield)
+/**
+ * A type's flight-deck glazing: its panes, an optional outline around them (the A350's mask), its
+ * wipers and a spec-sheet label. For jets [anchor] places the windshield: s = 0 is where the nose's
+ * crest reaches [anchor] cockpit units above the centreline, and the unit is the fuselage height.
+ */
+class Windshield(
+    val label: String,
+    val panes: List<Pane>,
+    val mask: Pane? = null,
+    val wipers: List<Wiper> = emptyList(),
+    val anchor: Double? = null,
+    /** The nose crest this flight deck sits on (jets). */
+    val cab: Cab? = null,
+)
+
+/**
+ * A jet's nose crest in side view, in fuselage heights (s aft of the nose tip, z above the
+ * centreline): the radome's top rises from the tip to the windscreen's foot ([sW], [zW]), the flat
+ * windscreen runs up to its head ([sT], [zT]), and the roof rounds over to the full crown by [sR].
+ * [radome] (0..1) shapes the radome: lower is blunter.
+ */
+data class Cab(val sW: Double, val zW: Double, val sT: Double, val zT: Double, val sR: Double, val radome: Double = 0.5) {
+    /** Crest height at [x], given the tip's height [zTip]. */
+    fun top(x: Double, zTip: Double): Double {
+        val slope = (zT - zW) / (sT - sW)
+        return when {
+            x <= 0 -> zTip
+            // Blunt at the tip, still climbing where it meets the windscreen.
+            x < sW -> zTip + (zW - zTip) * (x / sW).let { t -> (1 - radome) * t.pow(0.35) + radome * t }
+            x < sT -> zW + slope * (x - sW)
+            x < sR -> {
+                val p = (slope * (sR - sT) / (0.5 - zT)).coerceIn(1.0, 2.6)
+                0.5 - (0.5 - zT) * (1 - (x - sT) / (sR - sT)).pow(p)
+            }
+            else -> 0.5
+        }
+    }
+}
+
+/** Glazing on a body: cockpit coordinates start at station [s0] and count in units of [unit] metres. */
+data class Cockpit(val s0: Double, val unit: Double, val shield: Windshield)
 
 /** A lofted shell: fuselage, pod, tip tank, canopy. [box] > 2 squares the sections off. */
 data class Body(
@@ -288,32 +353,30 @@ internal class Mesher(private val lod: Lod) {
         }
     }
 
-    /** Windshield panes, their edges sampled along the surface so they curve with the nose. */
+    /** Windshield panes on the skin: rounded, framed and wiped up close, outlines only at mid detail. */
     private fun cockpit(b: Body) {
         val c = b.cockpit ?: return
-        val degPerStep = if (detail) 12.0 else 30.0
-        val minSteps = if (detail) 3 else 1
-        fun pt(u: Double, deg: Double) = b.point(b.at(c.s + u * c.len), rad(deg))
+        val g = Glazing(b, c)
+        val seg = c.unit * if (detail) 0.035 else 0.12
+        val arc = if (detail) 3 else 1
         fun draw(p: Pane, faint: Boolean) {
+            val right = g.outline(p, seg, arc)
+            val glass = if (detail && !faint && p.frame > 0) g.inset(right, p.frame * c.unit, p.closed) else null
             for (left in if (p.mirror) listOf(false, true) else listOf(false)) {
-                val cs = p.corners.map { (u, d) -> u to (if (left) 180 - d else d) }
-                val n = cs.size
-                val ids = ArrayList<Int>()
-                for (i in 0 until if (p.closed) n else n - 1) {
-                    val (u0, d0) = cs[i]
-                    val (u1, d1) = cs[(i + 1) % n]
-                    val steps = max(minSteps, ceil(abs(d1 - d0) / degPerStep).toInt())
-                    for (j in 0 until steps) {
-                        val t = j.toDouble() / steps
-                        ids += v(pt(u0 + (u1 - u0) * t, d0 + (d1 - d0) * t))
-                    }
-                }
-                if (!p.closed) cs.last().let { (u, d) -> ids += v(pt(u, d)) }
-                path(ids, closed = p.closed, faint = faint, accent = !faint)
+                path(right.map { v(if (left) it.p.flipX() else it.p) }, closed = p.closed, faint = faint, accent = !faint)
+                glass?.let { l -> path(l.map { v(if (left) it.flipX() else it) }, closed = p.closed, faint = true) }
             }
         }
         for (p in c.shield.panes) if (detail || p.essential) draw(p, faint = false)
-        if (detail) c.shield.mask?.let { draw(it, faint = true) }
+        if (!detail) return
+        c.shield.mask?.let { draw(it, faint = true) }
+        for (w in c.shield.wipers) {
+            val pane = c.shield.panes[w.pane]
+            val lines = g.wiper(w, pane)
+            for (left in if (pane.mirror) listOf(false, true) else listOf(false)) {
+                for (l in lines) path(l.map { v(if (left) it.flipX() else it) })
+            }
+        }
     }
 
     private fun refine(ribs: List<Rib>, pieces: Int): List<Rib> {
