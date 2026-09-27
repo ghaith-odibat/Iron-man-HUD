@@ -49,8 +49,25 @@ data class Section(val s: Double, val halfW: Double, val zc: Double, val up: Dou
 /** A row of cabin windows [angleDeg] above the side line (both sides). */
 data class WindowRow(val s0: Double, val s1: Double, val angleDeg: Double, val pitch: Double = 0.53, val size: Double = 0.26)
 
-/** Flight-deck windows starting at station [s], spread over [len] metres. */
-data class Cockpit(val s: Double, val len: Double)
+/**
+ * A window or frame drawn on a body's surface. Corners are (u, deg): u runs 0..1 through the
+ * glazing zone of a [Cockpit], deg goes round the section from the side line (0) over the top (90)
+ * to the far side (180), negative below the side line. Panes are repeated on the left unless they
+ * cross the centreline ([mirror] = false); [closed] = false draws an open frame (canopy bow, sill);
+ * [essential] panes are also drawn on live, mid-detail models.
+ */
+data class Pane(
+    val corners: List<Pair<Double, Double>>,
+    val mirror: Boolean = true,
+    val closed: Boolean = true,
+    val essential: Boolean = false,
+)
+
+/** A type's flight-deck glazing: its panes, an optional faint outline (the A350's mask), and a spec-sheet label. */
+class Windshield(val label: String, val panes: List<Pane>, val mask: Pane? = null)
+
+/** The glazing zone, stations [s] to [s] + [len], and the windshield in it. */
+data class Cockpit(val s: Double, val len: Double, val shield: Windshield)
 
 /** A lofted shell: fuselage, pod, tip tank, canopy. [box] > 2 squares the sections off. */
 data class Body(
@@ -61,6 +78,8 @@ data class Body(
     val sides: Int = 12,
     val windows: List<WindowRow> = emptyList(),
     val cockpit: Cockpit? = null,
+    /** False for glass (canopies): no frames at every station, just the outline and the glazing's own frames. */
+    val rings: Boolean = true,
 ) : Part {
     val length: Double get() = sections.last().s - sections.first().s
 
@@ -153,6 +172,7 @@ internal class Mesher(private val lod: Lod) {
     private val pts = ArrayList<P3>()
     private val solid = ArrayList<Int>()
     private val dim = ArrayList<Int>()
+    private val bold = ArrayList<Int>()
     private val spins = ArrayList<SpinRaw>()
 
     private class SpinRaw(val first: Int, val end: Int, val origin: P3, val axis: P3, val rev: Double)
@@ -165,15 +185,19 @@ internal class Mesher(private val lod: Lod) {
         return pts.size - 1
     }
 
-    private fun line(a: Int, b: Int, faint: Boolean = false) {
-        val l = if (faint) dim else solid
+    private fun line(a: Int, b: Int, faint: Boolean = false, accent: Boolean = false) {
+        val l = when {
+            accent -> bold
+            faint -> dim
+            else -> solid
+        }
         l += a
         l += b
     }
 
-    private fun path(ids: List<Int>, closed: Boolean = false, faint: Boolean = false) {
-        for (i in 0 until ids.size - 1) line(ids[i], ids[i + 1], faint)
-        if (closed && ids.size > 2) line(ids.last(), ids.first(), faint)
+    private fun path(ids: List<Int>, closed: Boolean = false, faint: Boolean = false, accent: Boolean = false) {
+        for (i in 0 until ids.size - 1) line(ids[i], ids[i + 1], faint, accent)
+        if (closed && ids.size > 2) line(ids.last(), ids.first(), faint, accent)
     }
 
     private fun sides(mirror: Boolean) = if (mirror) doubleArrayOf(1.0, -1.0) else doubleArrayOf(1.0)
@@ -216,6 +240,7 @@ internal class Mesher(private val lod: Lod) {
             verts, solid.toIntArray(), dim.toIntArray(),
             spins.map { Spin(it.first, it.end, model(it.origin), floatArrayOf(it.axis.x.toFloat(), (-it.axis.s).toFloat(), it.axis.z.toFloat()), it.rev.toFloat()) },
             extent,
+            bold.toIntArray(),
         )
     }
 
@@ -242,10 +267,10 @@ internal class Mesher(private val lod: Lod) {
             }
             val last = rings.lastIndex
             // Every station is a ring up close; further out every other one keeps the shape without clutter.
-            loft(rings, n, 1) { i -> detail || i == last || i % 2 == 0 }
-            if (detail && k > 0) {
-                windows(b)
-                cockpit(b)
+            loft(rings, n, 1) { i -> b.rings && (detail || i == last || i % 2 == 0) }
+            if (k > 0) {
+                if (detail) windows(b)
+                if (!lite) cockpit(b)
             }
         }
     }
@@ -263,18 +288,32 @@ internal class Mesher(private val lod: Lod) {
         }
     }
 
+    /** Windshield panes, their edges sampled along the surface so they curve with the nose. */
     private fun cockpit(b: Body) {
         val c = b.cockpit ?: return
-        fun p(s: Double, deg: Double) = v(b.point(b.at(s), rad(deg)))
-        val s0 = c.s
-        val s1 = c.s + c.len * 0.42
-        val s2 = c.s + c.len * 0.5
-        val s3 = c.s + c.len
-        for (left in listOf(false, true)) {
-            fun d(deg: Double) = if (left) 180 - deg else deg
-            path(listOf(p(s0, d(86.0)), p(s0, d(50.0)), p(s1, d(56.0)), p(s1, d(86.0))), closed = true)
-            path(listOf(p(s2, d(52.0)), p(s2, d(26.0)), p(s3, d(28.0)), p(s3, d(52.0))), closed = true)
+        val degPerStep = if (detail) 12.0 else 30.0
+        val minSteps = if (detail) 3 else 1
+        fun pt(u: Double, deg: Double) = b.point(b.at(c.s + u * c.len), rad(deg))
+        fun draw(p: Pane, faint: Boolean) {
+            for (left in if (p.mirror) listOf(false, true) else listOf(false)) {
+                val cs = p.corners.map { (u, d) -> u to (if (left) 180 - d else d) }
+                val n = cs.size
+                val ids = ArrayList<Int>()
+                for (i in 0 until if (p.closed) n else n - 1) {
+                    val (u0, d0) = cs[i]
+                    val (u1, d1) = cs[(i + 1) % n]
+                    val steps = max(minSteps, ceil(abs(d1 - d0) / degPerStep).toInt())
+                    for (j in 0 until steps) {
+                        val t = j.toDouble() / steps
+                        ids += v(pt(u0 + (u1 - u0) * t, d0 + (d1 - d0) * t))
+                    }
+                }
+                if (!p.closed) cs.last().let { (u, d) -> ids += v(pt(u, d)) }
+                path(ids, closed = p.closed, faint = faint, accent = !faint)
+            }
         }
+        for (p in c.shield.panes) if (detail || p.essential) draw(p, faint = false)
+        if (detail) c.shield.mask?.let { draw(it, faint = true) }
     }
 
     private fun refine(ribs: List<Rib>, pieces: Int): List<Rib> {

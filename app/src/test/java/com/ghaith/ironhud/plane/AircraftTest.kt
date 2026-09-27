@@ -61,6 +61,36 @@ class AircraftTest {
         assertTrue(AircraftModels.airframeFor(plane(type = null, category = "A1")).generic)
     }
 
+    @Test fun everyModelHasItsOwnWindshield() {
+        val glazing = listOf("PANE", "WINDSHIELD", "CANOPY", "GREENHOUSE", "COCKPITS", "GLAZED")
+        for (a in AircraftTypes.catalog) {
+            if (a.kind == ModelKind.BALLOON) continue
+            assertTrue("${a.id} has a windshield", a.features.any { f -> glazing.any { it in f } })
+        }
+        fun f(code: String) = AircraftTypes.byCode(code)!!.features
+        assertTrue(f("B733").any { "EYEBROW" in it })              // 737 Classic kept its eyebrow windows…
+        assertFalse(f("B738").any { "EYEBROW" in it })             // …the NG and MAX dropped them
+        assertTrue(f("MD82").any { "EYEBROW" in it })
+        assertFalse(f("B77W").any { "EYEBROW" in it })
+        assertTrue("4-PANE CURVED WINDSHIELD · MASK" in f("A359"))
+        assertTrue("4-PANE FLIGHT DECK" in f("B788"))
+        assertTrue("6-PANE FLIGHT DECK" in f("A320"))
+        assertTrue("ONE-PIECE WINDSHIELD" in f("C172"))
+        assertTrue("BUBBLE CANOPY" in f("R44"))
+        assertTrue("FRAMELESS BUBBLE CANOPY" in f("F16"))
+        assertTrue("TANDEM CANOPY" in f("PC21"))
+        assertTrue(f("IL76").any { "GLAZED NAVIGATOR NOSE" in it })
+    }
+
+    @Test fun windshieldsShowOnLiveModelsButNotFarAway() {
+        val a = AircraftTypes.byCode("B789")!!
+        val detail = AircraftModels.mesh(a, Lod.DETAIL).accent.size
+        val normal = AircraftModels.mesh(a, Lod.NORMAL).accent.size
+        assertTrue("full glazing close up", detail > normal)
+        assertTrue("essential panes on live models", normal > 0)
+        assertEquals("nothing on distant planes", 0, AircraftModels.mesh(a, Lod.LITE).accent.size)
+    }
+
     @Test fun catalogueCodesAreUnique() {
         val codes = AircraftTypes.catalog.flatMap { it.codes }
         assertEquals(codes.groupBy { it }.filterValues { it.size > 1 }.keys.toString(), codes.size, codes.toSet().size)
@@ -76,7 +106,7 @@ class AircraftTest {
                 val tag = "${a.id} $lod"
                 assertTrue("$tag has edges", m.edges.size >= 60)
                 assertTrue("$tag even edge list", m.edges.size % 2 == 0 && m.faint.size % 2 == 0)
-                assertTrue("$tag edge indices in range", (m.edges + m.faint).all { it in 0 until m.vertexCount })
+                assertTrue("$tag edge indices in range", (m.edges + m.faint + m.accent).all { it in 0 until m.vertexCount })
                 assertTrue("$tag finite", m.vertices.all { it.isFinite() })
                 for (i in 0 until m.vertexCount) {
                     assertTrue("$tag x within the unit box", abs(m.vertices[i * 3]) <= 0.5001f)

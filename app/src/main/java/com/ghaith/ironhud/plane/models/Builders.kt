@@ -408,6 +408,8 @@ internal fun jet(
     dorsal: Boolean = false, fairing: Boolean = true,
     extra: (Body, WingPlan) -> List<Part> = { _, _ -> emptyList() },
     extraFeatures: List<String> = emptyList(),
+    /** The type's flight-deck glazing (see [Windshields]). */
+    shield: Windshield = Windshields.deck(),
 ): Design {
     val parts = ArrayList<Part>()
     val features = LinkedHashSet<String>()
@@ -420,7 +422,7 @@ internal fun jet(
         if (hump != null && hump.h > 0.8) add(WindowRow(hump.start + hump.rampIn * 0.9, hump.end - hump.rampOut * 0.9, 58.0, windowPitch, windowSize))
     }
     val body = Body(tube(L, W, H, noseM, tailM, noseTip, blunt, tailZ, tailR, hump, keel), box = box, windows = rows,
-        cockpit = Cockpit(noseM * 0.38, noseM * 0.5))
+        cockpit = Cockpit(noseM * 0.38, noseM * 0.5, shield))
     parts += body
 
     val zw = wingZ * H / 2
@@ -525,6 +527,7 @@ internal fun jet(
     if (decks == 2) features += "FULL DOUBLE DECK"
     parts += extra(body, wing)
     features += extraFeatures
+    features += shield.label
     return Design(parts, features.toList(), L, span)
 }
 
@@ -599,6 +602,10 @@ internal fun light(
     finH: Double, finRoot: Double, finTip: Double = finRoot * 0.55, finSweep: Double = 35.0,
     stabSpan: Double, stabRoot: Double, stabTip: Double = stabRoot * 0.7, stabSweep: Double = 4.0,
     gear: Gear = Gear.TRICYCLE, box: Double = 2.2, biplane: Double? = null,
+    /** Cabin glazing, over the zone from the firewall back to the rear window (null: none). */
+    shield: Windshield? = Windshields.GA_LOW,
+    /** A tandem canopy pod over the cabin instead (trainers). */
+    canopy: Windshield? = null,
 ): Design {
     val parts = ArrayList<Part>()
     val features = LinkedHashSet<String>()
@@ -607,8 +614,14 @@ internal fun light(
         highWing -> GA_HIGH
         else -> GA_LOW
     }
-    val body = Body(table(L, W, H, rows), box = box, sides = 12)
+    val body = Body(table(L, W, H, rows), box = box, sides = 12, cockpit = shield?.let { Cockpit(L * 0.19, L * 0.43, it) })
     parts += body
+    if (canopy != null) {
+        val s0 = L * 0.2
+        val len = L * 0.4
+        parts += Body(pod(s0, len, W * 0.38, body.at(s0 + len * 0.4).top - H * 0.12), sides = 10, rings = false,
+            cockpit = Cockpit(s0, len, canopy))
+    }
     val rootLE = wingAt * L
     val sec = body.at(rootLE + root * 0.3)
     val zw = if (highWing) sec.top - 0.04 else sec.bottom + 0.14 * H
@@ -657,6 +670,7 @@ internal fun light(
         }
         else -> Unit
     }
+    (shield ?: canopy)?.let { features += it.label }
     return Design(parts, features.toList(), L, max(span, biplane ?: 0.0))
 }
 
@@ -714,6 +728,8 @@ internal fun heli(
     L: Double, W: Double, H: Double, rotor: Double, blades: Int,
     style: HeliStyle = HeliStyle.POD, tailRotor: HeliTail, gear: Gear = Gear.SKIDS,
     tandem: Boolean = false, coaxial: Boolean = false, stubWing: Double = 0.0, twinFins: Boolean = false,
+    /** Nose and cabin glazing, over the zone from the nose back past the doors. */
+    shield: Windshield = Windshields.HELI_UTILITY,
 ): Design {
     val parts = ArrayList<Part>()
     val features = LinkedHashSet<String>()
@@ -723,7 +739,9 @@ internal fun heli(
         HeliStyle.TRANSPORT -> HELI_TRANSPORT
         HeliStyle.ATTACK -> HELI_ATTACK
     }
-    val body = Body(table(L, W, H, rows), box = if (style == HeliStyle.TRANSPORT) 3.0 else 2.3, sides = 12)
+    val zone = if (style == HeliStyle.TRANSPORT) L * 0.2 else L * 0.5
+    val body = Body(table(L, W, H, rows), box = if (style == HeliStyle.TRANSPORT) 3.0 else 2.3, sides = 12,
+        cockpit = Cockpit(0.0, zone, shield))
     parts += body
     val mast = 0.35 * H
     fun mainRotor(s: Double, z: Double, rev: Double, phase: Double = 0.0) = Rotor(
@@ -816,6 +834,7 @@ internal fun heli(
         else -> Unit
     }
     val overall = if (tandem) L + rotor * 0.6 else max(L, rotor / 2 + L * 0.7)
+    features += shield.label
     return Design(parts, features.toList(), overall, rotor, rotorM = rotor)
 }
 
@@ -837,12 +856,15 @@ internal fun fighter(
     tail: TailKind = TailKind.Low, finH: Double, finRoot: Double, finTip: Double, finSweep: Double = 45.0,
     stabSpan: Double = 0.0, stabRoot: Double = 0.0, stabTip: Double = 0.0, stabSweep: Double = 40.0,
     canard: Double = 0.0, engines: Int = 1, tip: Tip = Tip.None, podEngines: Boolean = false,
+    /** Canopy framing (see [Windshields]). */
+    shield: Windshield = Windshields.CANOPY_FRAMED,
 ): Design {
     val parts = ArrayList<Part>()
     val features = LinkedHashSet<String>()
     val body = Body(table(L, W, H, FIGHTER), box = 2.2, sides = 12)
     parts += body
-    parts += Body(pod(L * 0.12, L * 0.24, W * 0.2, body.at(L * 0.22).top - 0.05), sides = 10)
+    parts += Body(pod(L * 0.12, L * 0.24, W * 0.2, body.at(L * 0.22).top - 0.05), sides = 10, rings = false,
+        cockpit = Cockpit(L * 0.12, L * 0.24, shield))
     val sec = body.at(wingAt * L + root * 0.4)
     val wing = WingPlan(span / 2, wingAt * L, root, tipChord, sweep, dihedral, sec.zc + wingZ * sec.up, x0 = sec.halfW * 0.9, tc = 0.05, tip = tip)
     parts += wing.parts()
@@ -869,6 +891,7 @@ internal fun fighter(
     }
     features += "$engines × ${if (podEngines) "TURBOFAN" else "JET ENGINE"}"
     if (span < L * 0.8 && sweep > 45) features += "DELTA WING"
+    features += shield.label
     return Design(parts, features.toList(), L, span)
 }
 
@@ -888,13 +911,14 @@ internal fun glider(L: Double = 7.0, span: Double = 18.0): Design {
     val body = Body(table(L, W, H, GLIDER), sides = 10)
     val parts = ArrayList<Part>()
     parts += body
-    parts += Body(pod(L * 0.06, L * 0.3, W * 0.42, body.at(L * 0.2).top - 0.08), sides = 8)
+    parts += Body(pod(L * 0.06, L * 0.3, W * 0.42, body.at(L * 0.2).top - 0.08), sides = 8, rings = false,
+        cockpit = Cockpit(L * 0.06, L * 0.3, Windshields.GLIDER_CANOPY))
     val sec = body.at(L * 0.34)
     parts += WingPlan(span / 2, L * 0.32, 1.0, 0.4, 1.5, 3.0, sec.top - 0.1, x0 = W * 0.4, tc = 0.12,
         tip = Tip.Winglet(0.35, cant = 10.0, blend = 0.0)).parts()
     val emp = Empennage(1.2, 0.95, 0.55, 20.0, 2.8, 0.55, 0.35, 3.0, TailKind.T, 0.0, 1.0)
     parts += emp.parts(body, L)
-    return Design(parts, listOf("SAILPLANE", "HIGH-ASPECT WING", "T-TAIL"), L, span)
+    return Design(parts, listOf("SAILPLANE", "HIGH-ASPECT WING", "T-TAIL", Windshields.GLIDER_CANOPY.label), L, span)
 }
 
 /** Hot-air balloon: envelope of [gores] panels, basket and flying wires. */
@@ -931,7 +955,7 @@ internal fun balloon(r: Double = 8.5, gores: Int = 16): Design {
 internal fun drone(L: Double = 11.0, span: Double = 20.0): Design = light(
     L = L, W = 1.0, H = 1.1, highWing = false, span = span, root = 1.1, tipChord = 0.5, dihedral = 2.0, wingAt = 0.5,
     strut = false, prop = Prop(2.9, 3, pusher = true), tail = TailKind.V(-40.0), finH = 0.9, finRoot = 0.9,
-    stabSpan = 4.0, stabRoot = 0.8, stabTip = 0.5, stabSweep = 15.0, gear = Gear.NONE,
+    stabSpan = 4.0, stabRoot = 0.8, stabTip = 0.5, stabSweep = 15.0, gear = Gear.NONE, shield = null,
 ).let { d ->
     // Move the propeller from the nose to the tail.
     val parts = d.parts.map { p ->

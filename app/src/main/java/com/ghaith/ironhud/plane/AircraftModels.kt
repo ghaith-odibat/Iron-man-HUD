@@ -9,8 +9,8 @@ import kotlin.math.sin
 /**
  * A wireframe in model space: x = right wing, y = nose, z = up, scaled so the larger of length and
  * span is one unit and centred on the airframe. [edges] are the structure, [faint] the fine detail
- * drawn dimmer (propeller discs, windows, hinge lines), and [spins] the vertex runs that turn
- * (propellers, rotors, radar domes).
+ * drawn dimmer (propeller discs, windows, hinge lines), [accent] the glazing drawn bolder, and
+ * [spins] the vertex runs that turn (propellers, rotors, radar domes).
  */
 class WireMesh(
     val vertices: FloatArray,
@@ -19,6 +19,8 @@ class WireMesh(
     val spins: List<Spin> = emptyList(),
     /** Metres per model unit (the aircraft's larger dimension). */
     val unitM: Double = 1.0,
+    /** Glazing (windshields, canopies), drawn brighter and bolder so it reads through the frame. */
+    val accent: IntArray = IntArray(0),
 ) {
     val vertexCount: Int get() = vertices.size / 3
 }

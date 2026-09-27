@@ -21,6 +21,8 @@ class WireProjection {
     val near = LineBuffer()
     val far = LineBuffer()
     val faint = LineBuffer()
+    /** Glazing on the near side (the far side's joins [far]). */
+    val accent = LineBuffer()
 
     /** Screen position of the model origin, valid after [project] when [originVisible]. */
     var originX = 0f
@@ -65,10 +67,12 @@ class WireProjection {
         near.clear()
         far.clear()
         faint.clear()
+        accent.clear()
         // Edges beyond the model's centre are "far" and drawn dimmer: a cheap depth cue.
         val split = (m[2] * 2).toFloat()
         collect(mesh.edges, split, near, far)
         collect(mesh.faint, Float.MAX_VALUE, faint, faint)
+        collect(mesh.accent, split, accent, far)
     }
 
     private fun collect(edges: IntArray, split: Float, nearBuf: LineBuffer, farBuf: LineBuffer) {

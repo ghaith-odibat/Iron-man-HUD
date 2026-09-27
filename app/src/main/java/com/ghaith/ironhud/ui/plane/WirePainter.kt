@@ -40,9 +40,12 @@ class WirePainter {
             lines(canvas, p.near, Hud.blue(0.14f * alpha).toArgb(), glowPx)
             lines(canvas, p.far, Hud.blue(0.06f * alpha).toArgb(), glowPx)
         }
+        // A soft halo so windshields read even on small, dense models.
+        lines(canvas, p.accent, Hud.blue(0.22f * alpha).toArgb(), strokePx * 4f)
         lines(canvas, p.faint, Hud.blue(0.38f * alpha).toArgb(), strokePx * 0.8f)
         lines(canvas, p.far, Hud.blue(0.45f * alpha).toArgb(), strokePx)
         lines(canvas, p.near, Hud.blue(alpha).toArgb(), strokePx)
+        lines(canvas, p.accent, Hud.blue(alpha).toArgb(), strokePx * 1.8f)
     }
 
     private fun lines(canvas: android.graphics.Canvas, buf: LineBuffer, argb: Int, width: Float) {

@@ -66,9 +66,19 @@ Tap **PLANE** to see live aircraft through the camera:
   * 747-400 winglets and upper deck vs 747-8 raked tips and longer deck.
   * 777-300ER raked tips vs 777X folding tips.
   * Fenestron vs tail rotor, skids vs wheels.
+  * Each type has its own windshield:
+    * Airliners: 6-pane Airbus with notched rear windows, the A350's 4 curved panes in their mask,
+      and the 787's 4 panes. Eyebrow windows on the 737 Classic, 707/727 and DC-9/MD-80, but not
+      on the 737NG/MAX or 777.
+    * Military: the Il-76 glazed navigator nose, and the chin windows on the C-130 and C-17.
+    * Light aircraft: one-piece Cessna and Piper screens, the Cirrus wrap and the Diamond bubble.
+    * Canopies: framed and frameless fighter canopies, tandem trainer canopies and glider canopies.
+    * Helicopters: Robinson bubbles and utility windscreens with chin windows.
   
   Models are built from real length and span with airfoil-thick wings, nacelles with fan faces
-  and exhaust cones, windows and cockpit panes. Propellers and rotors spin. Each model is rotated
+  and exhaust cones, and windows. Glazing is drawn bolder so the windshield reads through the
+  frame: in full in the hangar and on the card, and as an outline on nearby live planes.
+  Propellers and rotors spin. Each model is rotated
   to the plane's real heading and climb, and seen from where you stand, so a plane overhead shows
   its belly. Bigger aircraft look bigger, near halves are brighter than far halves, and models
   glide smoothly between data updates. Unknown types fall back to a generic model of the right
@@ -152,7 +162,8 @@ CameraX preview ──► ML Kit object tracker (on-device, every frame) ──�
 
 Aircraft models: `plane/models/` holds the parametric geometry (lofted fuselages, tapered wings
 with winglet/raked/fence tips, nacelles, props, rotors, gear) and `AircraftTypes`, the type
-catalogue. Meshes are built at three levels of detail and cached. `WireProjection` projects them
+catalogue. `Windshields` holds the per-type glazing layouts, drawn as panes over the nose.
+Meshes are built at three levels of detail and cached. `WireProjection` projects them
 into reusable line buffers, drawn in one batched call per brightness.
 
 Code map: `ai/` (providers, key rotation, streaming, parsing; plain JVM, unit-tested),
